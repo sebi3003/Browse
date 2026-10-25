@@ -1,0 +1,13 @@
+{
+  "Format": 99,
+  "Modified": "2026-12-01T00:00:00.0000000Z",
+  "Device": "FUTUREPC",
+  "Revision": 1000,
+  "Work": [
+    { "Title": "From the future", "Url": "https://future.example.com/", "Id": "b-1", "Children": null }
+  ],
+  "Private": [],
+  "Feeds": [],
+  "FeedFolders": [],
+  "Tombstones": [ { "Id": "b-0", "Deleted": "2026-11-30T00:00:00Z" } ]
+}

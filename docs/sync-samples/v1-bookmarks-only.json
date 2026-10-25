@@ -1,0 +1,9 @@
+{
+  "Format": 1,
+  "Modified": "2026-10-20T08:00:00.000Z",
+  "Device": "TAREEN",
+  "Work": [
+    { "Title": "Old bookmark", "Url": "https://old.example.com/", "Children": null }
+  ],
+  "Private": []
+}

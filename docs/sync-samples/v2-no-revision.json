@@ -1,0 +1,19 @@
+{
+  "Format": 2,
+  "Modified": "2026-10-25T16:16:07.5361211Z",
+  "Device": "TAREEN",
+  "Work": [
+    { "Title": "Example", "Url": "https://example.com/", "Children": null }
+  ],
+  "Private": [],
+  "Feeds": [
+    {
+      "Title": "Sifd",
+      "XmlUrl": "https://www.youtube.com/feeds/videos.xml?channel_id=UCALBEjFFT3liQ4hUkEEln2A",
+      "HtmlUrl": "https://www.youtube.com/channel/UCALBEjFFT3liQ4hUkEEln2A",
+      "Folder": "Lets Play",
+      "ThumbnailUrl": ""
+    }
+  ],
+  "FeedFolders": [ "Lets Play" ]
+}

@@ -1,0 +1,50 @@
+{
+  "Format": 3,
+  "Modified": "2026-10-26T09:15:30.1234567Z",
+  "Device": "MACBOOK",
+  "Revision": 7,
+  "Work": [
+    { "Title": "Example", "Url": "https://example.com/?a=1\u0026b=2", "Children": null },
+    {
+      "Title": "Dev",
+      "Url": "",
+      "Children": [
+        { "Title": "Docs", "Url": "https://docs.example.com/", "Children": null },
+        {
+          "Title": "Nested",
+          "Url": "",
+          "Children": [
+            { "Title": "Deep link", "Url": "https://deep.example.com/path", "Children": null }
+          ]
+        }
+      ]
+    }
+  ],
+  "Private": [
+    { "Title": "Private link", "Url": "https://private.example.com/", "Children": null }
+  ],
+  "Feeds": [
+    {
+      "Title": "Sifd",
+      "XmlUrl": "https://www.youtube.com/feeds/videos.xml?channel_id=UCALBEjFFT3liQ4hUkEEln2A",
+      "HtmlUrl": "https://www.youtube.com/channel/UCALBEjFFT3liQ4hUkEEln2A",
+      "Folder": "Lets Play",
+      "ThumbnailUrl": "https://yt3.googleusercontent.com/example-avatar=s900-c-k-c0x00ffffff-no-rj"
+    },
+    {
+      "Title": "tagesschau",
+      "XmlUrl": "https://www.youtube.com/feeds/videos.xml?channel_id=UC5NOEUbkLheQcaaRldYW5GA",
+      "HtmlUrl": "https://www.youtube.com/channel/UC5NOEUbkLheQcaaRldYW5GA",
+      "Folder": "News",
+      "ThumbnailUrl": ""
+    },
+    {
+      "Title": "A channel without a folder",
+      "XmlUrl": "https://www.youtube.com/feeds/videos.xml?channel_id=UCuAXFkgsw1L7xaCfnd5JJOw",
+      "HtmlUrl": null,
+      "Folder": "",
+      "ThumbnailUrl": null
+    }
+  ],
+  "FeedFolders": [ "Lets Play", "News", "Empty folder", "Unsorted" ]
+}
