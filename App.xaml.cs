@@ -22,7 +22,7 @@ namespace Browse
         }
 
         // Roaming, not Local: Velopack owns %LocalAppData%\Browse and can wipe unknown files there.
-        private static void LogCrash(string source, Exception ex)
+        internal static void LogCrash(string source, Exception ex)
         {
             try
             {
