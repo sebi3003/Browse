@@ -156,7 +156,13 @@ if the file exists:
     file = read; if unreadable/unsupported -> sync stays off (never overwrite)
     MERGE the file into the local data (nothing local is lost):
         bookmarks: for each profile, add the items of the file that are not there yet (links matched by exact Url; a folder is added
-                   with only the links that are missing locally; empty results are dropped)
+                   with only the links that are missing locally; empty results are dropped). Details that matter:
+                   - "known" URLs are collected from the LOCAL tree once, before anything is added; so the same URL twice inside the
+                     file counts as missing both times and is added twice;
+                   - a folder of the file is NEVER merged into a local folder of the same name: it is added as another folder
+                     (the pruned copy, containing only the missing links), at the end of that profile's bar;
+                   - the added items keep the file's order and come after all local items.
+                   (docs/sync-samples/merge/ has inputs and the exact expected result.)
         channels:  add channels whose XmlUrl (case-insensitive) is not there; folders: append names not there (case-insensitive)
 write (as above), which creates the file or writes the union back
 start watching: file-change notification + 30 s poll; subscribe to local edits
@@ -207,3 +213,6 @@ as the table says.
 | `v1-bookmarks-only.json` | No `Feeds`/`FeedFolders`              | Loads; local channels and folders are left alone. |
 | `v3-empty-lists.json`    | Empty `Work`, `Private`, `Feeds`      | If the device has local data: **not applied** (empty-file guard). On a device with no data: applied. |
 | `v99-future.json`        | `Format` 99 and unknown properties    | **Not applied and never overwritten**; status "written by a newer Browse". |
+| `is-newer-cases.json`    | The `isNewer` rule: revision vs clock, legacy files, a device that never synced | Every case has an `expected` boolean; compute `isNewer(state, file)` and compare. |
+| `merge/basic/`           | First-connection merge of bookmarks (`local.json` + `remote.json` -> `expected.json`) | The result must equal `expected.json` (Work and Private, order included). |
+| `merge/nested-and-empty/`| Nested known links, an empty remote folder, a remote folder whose links are all known, a URL twice in the file | Same. The expected files were produced by running the Windows implementation. |

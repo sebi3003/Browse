@@ -1,0 +1,12 @@
+# Keep line endings stable across Windows and macOS.
+* text=auto
+# Xcode project files and Swift sources must stay LF (a CRLF checkout can corrupt a .pbxproj).
+*.swift      text eol=lf
+*.pbxproj    text eol=lf
+*.xcscheme   text eol=lf
+*.plist      text eol=lf
+*.entitlements text eol=lf
+# Binary assets
+*.png  binary
+*.ico  binary
+*.icns binary

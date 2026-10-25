@@ -1,0 +1,54 @@
+{
+  "Work": [
+    {
+      "Title": "Alpha",
+      "Url": "https://a.example/",
+      "Children": null
+    },
+    {
+      "Title": "Dev",
+      "Url": "",
+      "Children": [
+        {
+          "Title": "B",
+          "Url": "https://b.example/",
+          "Children": null
+        }
+      ]
+    },
+    {
+      "Title": "Charlie",
+      "Url": "https://c.example/",
+      "Children": null
+    },
+    {
+      "Title": "Dev",
+      "Url": "",
+      "Children": [
+        {
+          "Title": "D",
+          "Url": "https://d.example/",
+          "Children": null
+        }
+      ]
+    },
+    {
+      "Title": "Gamma",
+      "Url": "",
+      "Children": [
+        {
+          "Title": "E",
+          "Url": "https://e.example/",
+          "Children": null
+        }
+      ]
+    }
+  ],
+  "Private": [
+    {
+      "Title": "P",
+      "Url": "https://p.example/",
+      "Children": null
+    }
+  ]
+}

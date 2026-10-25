@@ -7,3 +7,11 @@ publish/
 .idea/
 .vscode/
 Thumbs.db
+
+# macOS / Xcode (the Mac app lives in mac/)
+.DS_Store
+**/xcuserdata/
+**/DerivedData/
+*.xcuserstate
+mac/build/
+mac/.build/

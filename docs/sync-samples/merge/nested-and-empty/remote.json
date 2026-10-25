@@ -1,0 +1,19 @@
+{
+  "Work": [
+    { "Title": "F", "Url": "", "Children": [
+      { "Title": "G", "Url": "", "Children": [
+        { "Title": "Y (known)", "Url": "https://y.example/", "Children": null }
+      ] },
+      { "Title": "Z", "Url": "https://z.example/", "Children": null }
+    ] },
+    { "Title": "Empty", "Url": "", "Children": [] },
+    { "Title": "AllKnown", "Url": "", "Children": [
+      { "Title": "X again", "Url": "https://x.example/", "Children": null }
+    ] },
+    { "Title": "Z twice", "Url": "https://z.example/", "Children": null }
+  ],
+  "Private": [
+    { "Title": "Q", "Url": "https://q.example/", "Children": null },
+    { "Title": "R", "Url": "https://r.example/", "Children": null }
+  ]
+}

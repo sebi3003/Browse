@@ -1,0 +1,11 @@
+{
+  "Work": [
+    { "Title": "X", "Url": "https://x.example/", "Children": null },
+    { "Title": "F", "Url": "", "Children": [
+      { "Title": "Y", "Url": "https://y.example/", "Children": null }
+    ] }
+  ],
+  "Private": [
+    { "Title": "Q", "Url": "https://q.example/", "Children": null }
+  ]
+}

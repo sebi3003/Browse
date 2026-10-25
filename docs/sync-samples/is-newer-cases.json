@@ -1,0 +1,113 @@
+﻿{
+    "rule":  "isNewer(file): if file.Revision == 0 or file.Revision == state.SyncRevision then file.Modified \u003e state.SyncStamp else file.Revision \u003e state.SyncRevision",
+    "cases":  [
+                  {
+                      "name":  "higher revision wins even with an older date (clock skew)",
+                      "state":  {
+                                    "SyncRevision":  5,
+                                    "SyncStamp":  "2026-10-26T12:00:00Z"
+                                },
+                      "file":  {
+                                   "Revision":  6,
+                                   "Modified":  "2026-10-26T11:00:00Z"
+                               },
+                      "expected":  true
+                  },
+                  {
+                      "name":  "lower revision loses even with a newer date",
+                      "state":  {
+                                    "SyncRevision":  5,
+                                    "SyncStamp":  "2026-10-26T12:00:00Z"
+                                },
+                      "file":  {
+                                   "Revision":  4,
+                                   "Modified":  "2026-10-26T13:00:00Z"
+                               },
+                      "expected":  false
+                  },
+                  {
+                      "name":  "same revision, later time",
+                      "state":  {
+                                    "SyncRevision":  5,
+                                    "SyncStamp":  "2026-10-26T12:00:00Z"
+                                },
+                      "file":  {
+                                   "Revision":  5,
+                                   "Modified":  "2026-10-26T12:00:01Z"
+                               },
+                      "expected":  true
+                  },
+                  {
+                      "name":  "same revision, same time (this device\u0027s own write)",
+                      "state":  {
+                                    "SyncRevision":  5,
+                                    "SyncStamp":  "2026-10-26T12:00:00Z"
+                                },
+                      "file":  {
+                                   "Revision":  5,
+                                   "Modified":  "2026-10-26T12:00:00Z"
+                               },
+                      "expected":  false
+                  },
+                  {
+                      "name":  "same revision, earlier time",
+                      "state":  {
+                                    "SyncRevision":  5,
+                                    "SyncStamp":  "2026-10-26T12:00:00Z"
+                                },
+                      "file":  {
+                                   "Revision":  5,
+                                   "Modified":  "2026-10-26T11:59:59Z"
+                               },
+                      "expected":  false
+                  },
+                  {
+                      "name":  "legacy file (no revision), later time",
+                      "state":  {
+                                    "SyncRevision":  5,
+                                    "SyncStamp":  "2026-10-26T12:00:00Z"
+                                },
+                      "file":  {
+                                   "Revision":  0,
+                                   "Modified":  "2026-10-26T12:05:00Z"
+                               },
+                      "expected":  true
+                  },
+                  {
+                      "name":  "legacy file (no revision), earlier time",
+                      "state":  {
+                                    "SyncRevision":  5,
+                                    "SyncStamp":  "2026-10-26T12:00:00Z"
+                                },
+                      "file":  {
+                                   "Revision":  0,
+                                   "Modified":  "2026-10-26T11:00:00Z"
+                               },
+                      "expected":  false
+                  },
+                  {
+                      "name":  "device never synced (revision 0, no stamp), any real file",
+                      "state":  {
+                                    "SyncRevision":  0,
+                                    "SyncStamp":  "0001-01-01T00:00:00Z"
+                                },
+                      "file":  {
+                                   "Revision":  3,
+                                   "Modified":  "2026-10-26T11:00:00Z"
+                               },
+                      "expected":  true
+                  },
+                  {
+                      "name":  "device never synced, legacy file",
+                      "state":  {
+                                    "SyncRevision":  0,
+                                    "SyncStamp":  "0001-01-01T00:00:00Z"
+                                },
+                      "file":  {
+                                   "Revision":  0,
+                                   "Modified":  "2026-10-20T08:00:00Z"
+                               },
+                      "expected":  true
+                  }
+              ]
+}
