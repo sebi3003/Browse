@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- English-only, win-x64-only app: skip satellite resource folders. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <AssemblyTitle>Browse</AssemblyTitle>
+    <Product>Browse</Product>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <!-- Read-only GitHub token for update checks; injected by scripts/release.ps1 (-p:EmbeddedToken=...), empty in dev/CI. -->
+    <EmbeddedToken></EmbeddedToken>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="GitHubToken" Value="$(EmbeddedToken)" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
+  </ItemGroup>
+  <!-- Velopack requires taking over Main() (see App.xaml.cs), so App.xaml is no longer the entry point. -->
+  <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+  </ItemGroup>
+</Project>
