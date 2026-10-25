@@ -13,11 +13,8 @@
     <Product>Browse</Product>
     <Version>1.0.0</Version>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
-    <!-- Read-only GitHub token for update checks; injected by scripts/release.ps1 (-p:EmbeddedToken=...), empty in dev/CI. -->
-    <EmbeddedToken></EmbeddedToken>
   </PropertyGroup>
   <ItemGroup>
-    <AssemblyMetadata Include="GitHubToken" Value="$(EmbeddedToken)" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>

@@ -1,5 +1,6 @@
 bin/
 obj/
+Services/AppConfig.Secrets.cs
 .vs/
 *.user
 publish/

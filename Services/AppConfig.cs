@@ -1,16 +1,12 @@
-using System.Reflection;
-
 namespace Browse.Services
 {
     public static class AppConfig
     {
-        // GitHub repo used as the Velopack release feed (see scripts/release.ps1). The repo is private,
-        // so installed copies carry a read-only fine-grained token (Contents: Read, this repo only),
-        // injected at publish time as assembly metadata. Never use a write-capable token here.
-        public const string GitHubRepoUrl = "https://github.com/sebi3003/Browse";
-
-        public static string? GitHubAccessToken { get; } = Assembly.GetExecutingAssembly()
-            .GetCustomAttributes<AssemblyMetadataAttribute>()
-            .FirstOrDefault(a => a.Key == "GitHubToken")?.Value is { Length: > 0 } t ? t : null;
+        // GitHub repo used as the Velopack release feed. The repo is private, so installed copies read Releases through the
+        // GitHub API with a read-only token that ships inside the exe. The token itself lives in the gitignored
+        // AppConfig.Secrets.cs, which the shared Scripts\release.ps1 writes from GIT_TOKEN.txt (the "Embedded" entry) -
+        // never hardcode it here. A fresh clone needs that file once (an empty-token stub is fine) to build.
+        public static string GitHubRepoUrl { get; } = "https://github.com/sebi3003/Browse";
+        public static string GitHubAccessToken { get; } = AppSecrets.GitHubAccessToken;
     }
 }

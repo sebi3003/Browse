@@ -6,7 +6,10 @@ A small Chromium-based browser for Windows: a WPF (.NET 10) shell around the eve
 
 - Tabs: drag to reorder, middle-click or `✕` to close, favicons, lazy session restore
 - Address bar with search fallback and suggestions from bookmarks + history
-- Bookmarks bar (`☆`, right-click a bookmark to remove), history (`Ctrl+H`), downloads (`Ctrl+J`)
+- Bookmarks bar: one horizontal row with folders (nested drop-downs), `☆` to add, right-click to remove; two profiles, **Work** and **Private**, that only differ in their bookmarks; import from Edge (⋮ menu)
+- History (`Ctrl+H`), downloads (`Ctrl+J`); no password manager or autofill
+- Ad/tracker blocking (HaGeZi list, cached in `%AppData%\Browse\blocklist.txt`), cookie-banner hiding, YouTube ad handling, popups only on click, notification prompts denied (`Services/AdBlocker`)
+- Dark theme throughout (menus, context menus, scrollbars, title bar); starts maximized
 - Find (`Ctrl+F`), zoom, DevTools (`F12`), print, HTML5 fullscreen — all built into WebView2
 - Popups and `target=_blank` open as tabs (keeps `window.opener`, so OAuth sign-in works)
 - Auto-update via Velopack; an update downloads in the background and `⬆` restarts into it
@@ -23,6 +26,7 @@ A small Chromium-based browser for Windows: a WPF (.NET 10) shell around the eve
 - `MainWindow` — tab strip, toolbar, shortcuts, one `WebView2` per tab (shown/hidden)
 - `Services/BrowserStore` — bookmarks, history, session, settings in `%AppData%\Browse\browse.json`; browser profile in `%LocalAppData%\BrowseData`
 - `Services/UpdateService` — Velopack + GitHub Releases feed
+- `Services/AdBlocker`, `Services/EdgeImport` — request blocking / banner hiding, Edge bookmark import
 - Crash log: `%AppData%\Browse\crash.log`
 
 ## Build / run
@@ -35,10 +39,6 @@ dotnet run
 
 ## Release
 
-One-time: `dotnet tool install -g vpk`. Bump `<Version>` in `Browse.csproj`, then:
+Velopack, published with the shared `..\Scripts\release.ps1` (`-ProjectName Browse -CsprojPath ...\Browse\Browse.csproj -RepoUrl https://github.com/sebi3003/Browse`), the same way as Picture. One-time: `dotnet tool install -g vpk`. Bump `<Version>` in `Browse.csproj` (commit `Bump version to x.y.z`), then run the script with the same `-Version`. The installer and update packages land in `..\Builds\Browse`; `-SkipUpload` builds them without publishing to GitHub.
 
-```
-.\scripts\release.ps1 -Version 1.0.1
-```
-
-Tokens come from `GIT_TOKEN.txt` (`Publish` = read/write, never shipped; `Embedded Browse` = read-only, this repo only, injected into the exe as assembly metadata — falls back to `Embedded`). Dev and CI builds run without a token; update checks just stay off.
+The script writes the update token into `Services/AppConfig.Secrets.cs` (gitignored; an empty stub is included so the project builds). Installed copies check GitHub for a newer release shortly after start and offer to update; builds run from a folder never update.
