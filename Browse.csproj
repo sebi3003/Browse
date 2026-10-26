@@ -11,7 +11,7 @@
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <AssemblyTitle>Browse</AssemblyTitle>
     <Product>Browse</Product>
-    <Version>1.0.14</Version>
+    <Version>1.0.16</Version>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
