@@ -1,0 +1,15 @@
+{
+  "Format": 3,
+  "Modified": "2026-10-27T09:00:00.000Z",
+  "Device": "SAMPLE",
+  "Revision": 5,
+  "Work": [],
+  "Private": [],
+  "Theme": {
+    "TabSelected": "#8A3FD1",
+    "Menu": "#C0E07B16",
+    "folderText": "FFCC00",
+    "Sparkles": "#123456",
+    "Bookmark": "not a colour"
+  }
+}

@@ -29,6 +29,10 @@ namespace Browse.Services
         public ObservableCollection<Bookmark> Bookmarks { get; set; } = [];
         public ObservableCollection<Bookmark> PrivateBookmarks { get; set; } = [];
         public string Profile { get; set; } = Work;
+        /// <summary>Colours the user changed in the theme editor (key to hex); see ThemeService. Anything missing uses the default.</summary>
+        public Dictionary<string, string> Theme { get; set; } = [];
+        /// <summary>The effect played when switching tabs (Settings > Appearance).</summary>
+        public TabEffect TabEffect { get; set; } = TabEffect.Burn;
         public List<HistoryEntry> History { get; set; } = [];
         public List<string> Session { get; set; } = [];
         public int SessionIndex { get; set; }
@@ -42,6 +46,8 @@ namespace Browse.Services
         public DateTime SyncStamp { get; set; }
         /// <summary>The revision number of the sync file state this PC last wrote or applied (see docs/SYNC-FORMAT.md).</summary>
         public long SyncRevision { get; set; }
+        /// <summary>Per other device's sync file (by lower-case file name): the state this PC last applied from it.</summary>
+        public Dictionary<string, SyncPeerState> SyncPeers { get; set; } = [];
 
         /// <summary>When a bookmark was last changed by the user on this PC (not by a sync).</summary>
         [JsonIgnore] public DateTime LocalChangedAt { get; private set; }

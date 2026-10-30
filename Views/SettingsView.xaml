@@ -1,0 +1,95 @@
+<UserControl x:Class="Browse.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             IsVisibleChanged="OnVisibleChanged">
+    <!-- The Settings page: what used to sit in the menu. Same panel look as the rest of Browse (32 px panels, 4 px corners, 6 px gaps). -->
+    <UserControl.Resources>
+        <Style x:Key="SettingsButton" TargetType="Button">
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="Margin" Value="0,0,6,6"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeChipText}"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeChip}"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="B" CornerRadius="4" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="B" Property="Background" Value="{DynamicResource ThemeChipHover}"/></Trigger>
+                            <Trigger Property="IsEnabled" Value="False"><Setter TargetName="B" Property="Opacity" Value="0.45"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="SectionTitle" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Foreground" Value="{StaticResource Fg}"/>
+            <Setter Property="Margin" Value="0,18,0,8"/>
+        </Style>
+        <Style x:Key="Note" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="24,12,24,24" MaxWidth="760" HorizontalAlignment="Left">
+            <TextBlock Text="Settings" FontFamily="Segoe UI" FontSize="26" FontWeight="SemiBold" Foreground="{StaticResource Fg}" Margin="0,6,0,0"/>
+
+            <TextBlock Text="Bookmark sync" Style="{StaticResource SectionTitle}"/>
+            <TextBlock x:Name="SyncStatus" Style="{StaticResource Note}" Foreground="{StaticResource Fg}"/>
+            <TextBlock x:Name="SyncFile" Style="{StaticResource Note}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+            <WrapPanel>
+                <Button x:Name="SyncNowButton" Content="Sync now" Style="{StaticResource SettingsButton}" Click="SyncNow_Click"/>
+                <Button x:Name="SyncDefaultButton" Content="Sync with the default file" Style="{StaticResource SettingsButton}" Click="SyncDefault_Click"
+                        ToolTip="Install Kits\2026\Browser_Bookmarks"/>
+                <Button Content="Choose another file…" Style="{StaticResource SettingsButton}" Click="SyncChoose_Click"/>
+                <Button x:Name="SyncOffButton" Content="Turn sync off" Style="{StaticResource SettingsButton}" Click="SyncOff_Click"/>
+            </WrapPanel>
+
+            <TextBlock Text="Bookmarks" Style="{StaticResource SectionTitle}"/>
+            <TextBlock Text="Look up the site icons that are still missing, including ones that failed before." Style="{StaticResource Note}"/>
+            <WrapPanel>
+                <Button x:Name="FetchIconsButton" Content="Fetch bookmark icons" Style="{StaticResource SettingsButton}" Click="FetchIcons_Click"/>
+            </WrapPanel>
+
+            <TextBlock Text="Appearance" Style="{StaticResource SectionTitle}"/>
+            <TextBlock Text="Pick the colour of any part of the window." Style="{StaticResource Note}"/>
+            <WrapPanel>
+                <Button Content="Theme colours…" Style="{StaticResource SettingsButton}" Click="Theme_Click"/>
+            </WrapPanel>
+
+            <TextBlock Text="Tab switch effect" Style="{StaticResource SectionTitle}"/>
+            <TextBlock Text="What plays when you switch from one tab to another." Style="{StaticResource Note}"/>
+            <StackPanel>
+                <RadioButton x:Name="EffectBurn" GroupName="Effect" Content="Burn - the old page burns away into the new one" Foreground="{StaticResource Fg}" FontFamily="Segoe UI" FontSize="14" Margin="0,0,0,6" Click="Effect_Click"/>
+                <RadioButton x:Name="EffectDrop" GroupName="Effect" Content="Drop - the new page falls in like a heavy box, bounces and rocks" Foreground="{StaticResource Fg}" FontFamily="Segoe UI" FontSize="14" Margin="0,0,0,6" Click="Effect_Click"/>
+                <RadioButton x:Name="EffectSlip" GroupName="Effect" Content="Slip - the old page hangs on two nails, one gives, it swings and falls" Foreground="{StaticResource Fg}" FontFamily="Segoe UI" FontSize="14" Margin="0,0,0,6" Click="Effect_Click"/>
+                <RadioButton x:Name="EffectCurl" GroupName="Effect" Content="Page flip - turn the page like a book; also drag a lower corner of the page with the mouse" Foreground="{StaticResource Fg}" FontFamily="Segoe UI" FontSize="14" Margin="0,0,0,6" Click="Effect_Click"/>
+                <RadioButton x:Name="EffectFade" GroupName="Effect" Content="Fade - a quick, simple cross-fade" Foreground="{StaticResource Fg}" FontFamily="Segoe UI" FontSize="14" Margin="0,0,0,6" Click="Effect_Click"/>
+                <RadioButton x:Name="EffectRandom" GroupName="Effect" Content="Random - a different effect every time (never none)" Foreground="{StaticResource Fg}" FontFamily="Segoe UI" FontSize="14" Margin="0,0,0,6" Click="Effect_Click"/>
+                <RadioButton x:Name="EffectNone" GroupName="Effect" Content="None - switch instantly" Foreground="{StaticResource Fg}" FontFamily="Segoe UI" FontSize="14" Margin="0,0,0,6" Click="Effect_Click"/>
+            </StackPanel>
+            <WrapPanel Margin="0,6,0,0">
+                <Button x:Name="ApplyEffectButton" Content="Apply" Style="{StaticResource SettingsButton}" IsEnabled="False" Click="ApplyEffect_Click"/>
+            </WrapPanel>
+
+            <TextBlock Text="Updates" Style="{StaticResource SectionTitle}"/>
+            <TextBlock x:Name="VersionText" Style="{StaticResource Note}"/>
+            <WrapPanel>
+                <Button Content="Check for updates" Style="{StaticResource SettingsButton}" Click="CheckUpdates_Click"/>
+            </WrapPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

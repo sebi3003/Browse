@@ -41,11 +41,13 @@ namespace Browse.Services
             return http;
         }
 
-        /// <summary>Cache key for a page URL: its host without a leading "www."; empty for anything but http(s).</summary>
+        /// <summary>Cache key for a page URL: its host without a leading "www." (host:port for an IP address or localhost); empty for anything but http(s).</summary>
         public static string HostOf(string url)
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var u) || u.Scheme is not ("http" or "https")) return "";
             var host = u.IdnHost.ToLowerInvariant();
+            // Servers on an IP address or localhost are told apart by port: several apps share one machine, each with its own icon.
+            if (u.HostNameType == UriHostNameType.IPv4 || u.IsLoopback) return u.IsDefaultPort ? host : $"{host}:{u.Port}";
             return host.StartsWith("www.") ? host[4..] : host;
         }
 
@@ -70,7 +72,7 @@ namespace Browse.Services
                 var img = new BitmapImage();
                 img.BeginInit();
                 img.CacheOption = BitmapCacheOption.OnLoad; // releases the file straight away
-                img.DecodePixelWidth = 32;
+                img.DecodePixelWidth = 64; // enough for 200 % scaling; the Image downsamples with HighQuality
                 img.UriSource = new Uri(path);
                 img.EndInit();
                 img.Freeze();
@@ -87,7 +89,12 @@ namespace Browse.Services
             try
             {
                 var path = PathFor(host);
-                if (File.Exists(path) && File.ReadAllBytes(path).AsSpan().SequenceEqual(png)) return;
+                if (File.Exists(path))
+                {
+                    var existing = File.ReadAllBytes(path);
+                    // The page's own icon is often only 16 px: never replace a sharper icon fetched earlier with it.
+                    if (existing.AsSpan().SequenceEqual(png) || PngWidth(existing) > PngWidth(png)) return;
+                }
                 Directory.CreateDirectory(Dir);
                 File.WriteAllBytes(path, png);
                 Mem.TryRemove(host, out _);
@@ -103,7 +110,7 @@ namespace Browse.Services
             if (retryFailed) Failed.Clear();
             var todo = urls
                 .Select(u => (Url: u, Host: HostOf(u)))
-                .Where(x => x.Host.Length > 0 && !Has(x.Host) && !RecentlyFailed(x.Host))
+                .Where(x => x.Host.Length > 0 && (!Has(x.Host) || retryFailed && SavedWidth(x.Host) < 64) && !RecentlyFailed(x.Host)) // a manual fetch also upgrades small icons
                 .DistinctBy(x => x.Host)
                 .ToList();
             if (todo.Count == 0) return 0;
@@ -148,12 +155,22 @@ namespace Browse.Services
                 catch { /* page unreachable: still try /favicon.ico below */ }
                 candidates.Add("/favicon.ico");
 
-                foreach (var href in candidates.Distinct().Take(4))
+                // Candidates come biggest first; stop at the first one that is sharp enough for the 24 px tiles (64 px for 200 % scaling),
+                // otherwise keep the largest seen.
+                byte[]? best = null;
+                int bestWidth = 0;
+                foreach (var href in candidates.Distinct().Take(6))
                 {
                     var data = await DownloadAsync(baseUri, href);
                     if (data == null || Normalize(data) is not { } png) continue;
+                    int width = PngWidth(png);
+                    if (width > bestWidth) { best = png; bestWidth = width; }
+                    if (bestWidth >= 64) break;
+                }
+                if (best != null && bestWidth > SavedWidth(host))
+                {
                     Directory.CreateDirectory(Dir);
-                    File.WriteAllBytes(PathFor(host), png);
+                    File.WriteAllBytes(PathFor(host), best);
                     Mem.TryRemove(host, out _);
                     Added?.Invoke();
                     return true;
@@ -163,10 +180,21 @@ namespace Browse.Services
             return false;
         }
 
-        /// <summary>Icon hrefs from the page's &lt;link&gt; tags, plain "icon" first, touch icons after, SVG skipped.</summary>
+        private static int SavedWidth(string host)
+        {
+            try { return File.Exists(PathFor(host)) ? PngWidth(File.ReadAllBytes(PathFor(host))) : 0; }
+            catch { return 0; }
+        }
+
+        /// <summary>Pixel width from a PNG's IHDR chunk (0 if it is not a PNG).</summary>
+        private static int PngWidth(byte[] png) =>
+            png.Length > 24 && png[1] == (byte)'P' && png[2] == (byte)'N' && png[3] == (byte)'G'
+                ? (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19] : 0;
+
+        /// <summary>Icon hrefs from the page's &lt;link&gt; tags, largest first (by the sizes attribute; touch icons count as 180 px), SVG skipped.</summary>
         private static IEnumerable<string> IconLinks(string html)
         {
-            var found = new List<(int Rank, string Href)>();
+            var found = new List<(int Size, string Href)>();
             foreach (Match tag in Regex.Matches(html, @"<link\b[^>]*>", RegexOptions.IgnoreCase))
             {
                 var rel = Regex.Match(tag.Value, @"\brel\s*=\s*[""']([^""']+)[""']", RegexOptions.IgnoreCase).Groups[1].Value.ToLowerInvariant();
@@ -174,9 +202,11 @@ namespace Browse.Services
                 if (!rel.Contains("icon") || rel.Contains("mask-icon") || href.Length == 0) continue;
                 href = WebUtility.HtmlDecode(href);
                 if (href.Contains(".svg", StringComparison.OrdinalIgnoreCase) || href.StartsWith("data:image/svg", StringComparison.OrdinalIgnoreCase)) continue;
-                found.Add((rel.Contains("apple") ? 1 : 0, href));
+                var sizes = Regex.Match(tag.Value, @"\bsizes\s*=\s*[""'](\d+)x\d+", RegexOptions.IgnoreCase);
+                int size = sizes.Success ? int.Parse(sizes.Groups[1].Value) : rel.Contains("apple") ? 180 : 16;
+                found.Add((size, href));
             }
-            return found.OrderBy(f => f.Rank).Select(f => f.Href);
+            return found.OrderByDescending(f => f.Size).Select(f => f.Href);
         }
 
         private static async Task<byte[]?> DownloadAsync(Uri baseUri, string href)
@@ -196,14 +226,14 @@ namespace Browse.Services
             catch { return null; }
         }
 
-        /// <summary>Decodes any image the browser can show (ico/png/gif/jpg), picks a ~32 px frame and re-encodes it as PNG.</summary>
+        /// <summary>Decodes any image the browser can show (ico/png/gif/jpg), picks the smallest frame of 64 px or more (else the largest) and re-encodes it as PNG.</summary>
         private static byte[]? Normalize(byte[] data)
         {
             try
             {
                 using var input = new MemoryStream(data);
                 var decoder = BitmapDecoder.Create(input, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-                var frame = decoder.Frames.Where(f => f.PixelWidth >= 32).OrderBy(f => f.PixelWidth).FirstOrDefault()
+                var frame = decoder.Frames.Where(f => f.PixelWidth >= 64).OrderBy(f => f.PixelWidth).FirstOrDefault()
                             ?? decoder.Frames.OrderByDescending(f => f.PixelWidth).First();
                 if (frame.PixelWidth < 8 || frame.PixelHeight < 8) return null; // 1x1 tracking pixels and the like
                 BitmapSource source = frame;

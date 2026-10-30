@@ -72,20 +72,24 @@ namespace Browse
         {
             _startUrl = startUrl;
             AdBlocker.Start();
+            ThemeService.Init(_store);
             InitializeComponent();
             TabStrip.ItemsSource = _tabs;
             DownloadStrip.ItemsSource = _downloads;
             _store.Bookmarks.CollectionChanged += (_, e) => OnBookmarksChanged(e);
             _store.PrivateBookmarks.CollectionChanged += (_, e) => OnBookmarksChanged(e);
             FaviconService.Added += ScheduleBarRefresh;
+            _store.Profile = BrowserStore.Work; // always start on Work, even if Private was open when Browse closed
             ApplyProfile();
-            VersionItem.Header = $"Browse v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}";
             try { _updates = new UpdateService(AppConfig.GitHubRepoUrl, AppConfig.GitHubAccessToken); } catch { }
             Loaded += (_, _) => { RestoreTabs(); StartUpdateChecks(); StartIconBackfill(); };
             Closed += (_, _) => ExitProcess();
             InitFolderMenus();
             InitCacheChip();
             InitBookmarkSync();
+            InitSettings();
+            InitCurl();
+            InitServers();
             FeedsPanel.Initialize(_props); // the Feeds page's player shares the browser profile
             // The video's own fullscreen (F key, YouTube's button) makes the whole window fullscreen, not just its column.
             FeedsPanel.PlayerFullscreenChanged += on => SetFullscreen(on || _manualFullscreen);
@@ -130,6 +134,7 @@ namespace Browse
             _parkedTabs[from] = _tabs.ToList();
             if (_current != null) _current.View.Visibility = Visibility.Collapsed;
             _current = null;
+            ApplyChrome();
             _tabs.Clear(); // the strip empties; a selection change with nothing selected is ignored
 
             int index;
@@ -172,14 +177,90 @@ namespace Browse
             TabStrip.SelectedItem = CreateTab(url);
         }
 
+        private Action? _endFx; // ends a running tab switch effect right away (the page it was heading to becomes visible)
+        private bool _skipFx;   // closing a tab switches without the effect: the old page is about to be disposed
+
         private async Task SwitchToAsync(BrowserTab tab)
         {
-            if (_current != null) _current.View.Visibility = Visibility.Collapsed;
+            _endFx?.Invoke();
+            var old = _current;
+            bool fx = !_skipFx && _store.TabEffect != TabEffect.None && old != null && old != tab && IsLoaded && Host.IsVisible
+                      && !tab.IsSettings && !old.IsSettings;
             _current = tab;
-            tab.View.Visibility = Visibility.Visible;
+            ApplyChrome();
             UpdateChrome();
+            if (tab.IsSettings)
+            {
+                if (old != null) old.View.Visibility = Visibility.Collapsed;
+                return; // the settings page needs no WebView2
+            }
+            if (!(fx && await PlayTransitionAsync(old!, tab)))
+            {
+                if (old != null) old.View.Visibility = Visibility.Collapsed;
+                if (_current == tab) tab.View.Visibility = Visibility.Visible;
+            }
             await EnsureInitAsync(tab);
             if (_current == tab && !AddressBox.IsKeyboardFocused) tab.View.Focus();
+        }
+
+        // Burns the old page away into the new one. Returns false when there is nothing to blend (no snapshot of the target yet,
+        // size changed, superseded by another switch); the caller then switches plainly. Snapshots are taken when a tab is left.
+        private async Task<bool> PlayTransitionAsync(BrowserTab from, BrowserTab to)
+        {
+            var target = to.Snapshot == null ? Task.FromResult<PageFrame?>(null) : TabTransition.DecodeAsync(to.Snapshot);
+            if (from.View.IsVisible && await TabTransition.CaptureAsync(from.View) is { } png) from.Snapshot = png;
+            if (from.Snapshot == null || _current != to) return false;
+
+            var pair = await Task.WhenAll(TabTransition.DecodeAsync(from.Snapshot), target);
+            if (_current != to || pair[0] is not { } a) return false;
+            // A tab that was never shown (a new one) has no snapshot: it starts dark like the window, so a dark frame stands in for it.
+            var b = pair[1] ?? new PageFrame(a.Width, a.Height, Enumerable.Repeat(unchecked((int)0xFF0A0C10), a.Width * a.Height).ToArray());
+            if (a.Width != b.Width || a.Height != b.Height) return false;
+            var effect = TabEffects.Resolve(_store.TabEffect);
+            double durationMs = TabTransition.DurationMs(effect);
+            bool forward = _tabs.IndexOf(to) >= _tabs.IndexOf(from);
+            var fx = await Task.Run(() => new TabTransition(a, b, effect, forward));
+            if (_current != to) return false;
+
+            var bmp = new WriteableBitmap(a.Width, a.Height, 96, 96, PixelFormats.Pbgra32, null);
+            var rect = new Int32Rect(0, 0, a.Width, a.Height);
+            void Draw(double t) { fx.Render(t); bmp.WritePixels(rect, fx.Output, a.Width * 4, 0); }
+            Draw(0);
+            TransitionLayer.Source = bmp;
+            TransitionLayer.Visibility = Visibility.Visible;
+
+            // A WebView2 hides and shows a frame or two off from WPF's own drawing, so each handover overlaps: the old page is
+            // hidden only after the layer has been drawn, and the layer stays up a few frames after the new page is shown.
+            var done = new TaskCompletionSource();
+            var clock = System.Diagnostics.Stopwatch.StartNew();
+            int frames = 0, shownAt = 0;
+            void Frame(object? s, EventArgs e)
+            {
+                if (++frames == 1) { from.View.Visibility = Visibility.Collapsed; clock.Restart(); }
+                double t = Math.Min(1, clock.Elapsed.TotalMilliseconds / durationMs);
+                Draw(t);
+                if (t < 1) return;
+                if (shownAt == 0)
+                {
+                    shownAt = frames;
+                    if (_current == to) to.View.Visibility = Visibility.Visible;
+                }
+                else if (frames - shownAt >= 3) End();
+            }
+            void End()
+            {
+                CompositionTarget.Rendering -= Frame;
+                from.View.Visibility = Visibility.Collapsed;
+                if (_current == to) to.View.Visibility = Visibility.Visible;
+                TransitionLayer.Visibility = Visibility.Collapsed;
+                TransitionLayer.Source = null;
+                _endFx = null;
+                done.TrySetResult();
+            }
+            _endFx = End;
+            CompositionTarget.Rendering += Frame;
+            await done.Task;
+            return true;
         }
 
         private void CloseTab(BrowserTab tab)
@@ -187,11 +268,22 @@ namespace Browse
             int index = _tabs.IndexOf(tab);
             if (index < 0) return;
             if (tab.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) _closed.Push(tab.Url);
-            if (_tabs.Count == 1) { _tabs.Clear(); Close(); return; }
-            if (_current == tab) TabStrip.SelectedIndex = index > 0 ? index - 1 : 1;
+            bool last = _tabs.Count == 1;
+            if (last && tab.Url is "about:blank") return;   // already the blank tab the app rests on
+            if (_current == tab)
+            {
+                _skipFx = true;
+                try
+                {
+                    if (last) OpenTab("about:blank");       // closing the last tab leaves the app open on a blank one
+                    else TabStrip.SelectedIndex = index > 0 ? index - 1 : 1;
+                }
+                finally { _skipFx = false; }
+            }
             _tabs.Remove(tab);
             Host.Children.Remove(tab.View);
             tab.View.Dispose();
+            if (last) FocusAddress();
         }
 
         private void SelectOffset(int delta)
@@ -216,6 +308,11 @@ namespace Browse
         }
 
         private void NewTab_Click(object sender, RoutedEventArgs e) => NewBlankTab();
+
+        // Opens the most recently closed page; pressing again opens the one closed before it, and so on back through the history.
+        private void ReopenClosedTab() { if (_closed.TryPop(out var url)) OpenTab(url); }
+
+        private void Reopen_Click(object sender, RoutedEventArgs e) => ReopenClosedTab();
 
         private void CloseTab_Click(object sender, RoutedEventArgs e)
         {
@@ -258,6 +355,9 @@ namespace Browse
             c.Settings.IsGeneralAutofillEnabled = false;
             await AdBlocker.AttachAsync(c);
 
+            // Ask pages for their dark theme (prefers-color-scheme: dark); sites without one are unaffected.
+            c.Profile.PreferredColorScheme = CoreWebView2PreferredColorScheme.Dark;
+
             // Downloads always land in the current user's Downloads folder, without a "save as" prompt.
             c.Profile.DefaultDownloadFolderPath = DownloadsDir;
             c.DownloadStarting += (_, e) =>
@@ -292,7 +392,7 @@ namespace Browse
             // Pages may only open a tab/popup in response to a click; script-opened windows are dropped.
             c.NewWindowRequested += async (_, e) =>
             {
-                if (!e.IsUserInitiated) { e.Handled = true; return; }
+                if (!e.IsUserInitiated || AdBlocker.IsBlocked(e.Uri)) { e.Handled = true; return; }
                 var deferral = e.GetDeferral();
                 var popup = CreateTab("");
                 TabStrip.SelectedItem = popup;
@@ -411,9 +511,11 @@ namespace Browse
         private void ApplyChrome()
         {
             Toolbar.Visibility = _fullscreen ? Visibility.Collapsed : Visibility.Visible;
+            // Settings is a tab: the tab and bookmark rows stay, only the page area shows the settings page.
             TabRow.Visibility = BookmarkRow.Visibility = _fullscreen || _feedsMode ? Visibility.Collapsed : Visibility.Visible;
             Host.Visibility = _feedsMode ? Visibility.Collapsed : Visibility.Visible;
             FeedsPanel.Visibility = _feedsMode ? Visibility.Visible : Visibility.Collapsed;
+            SettingsPanel.Visibility = _settingsMode && !_feedsMode ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void SetFeedsMode(bool on)
@@ -423,50 +525,11 @@ namespace Browse
             CloseFolderMenu();
             ApplyChrome();
             if (on) FeedsPanel.Open(); else FeedsPanel.Close();
-            FeedsButton.Background = ChipBrush(on ? "#B3261E" : "#1A2332");   // YouTube red while the page is open
-            FeedsButton.BorderBrush = ChipBrush(on ? "#7A1B16" : "#0B2A5B");
+            FeedsButton.Background = on ? ChipBrush("#B3261E") : ThemeService.Brush("ThemeChip");   // YouTube red while the page is open
+            FeedsButton.BorderBrush = on ? ChipBrush("#7A1B16") : ThemeService.Brush("ThemeTool");
         }
 
         private void Feeds_Click(object sender, RoutedEventArgs e) => SetFeedsMode(!_feedsMode);
-
-        // Adds the YouTube channels of an OPML export (FeedBro and the like) that are not in the list yet. The dialog opens in
-        // Downloads with the newest .opml there already chosen, so it is one click for a fresh export.
-        private async void ImportOpml_Click(object sender, RoutedEventArgs e)
-        {
-            string downloads = DownloadsDir;
-            var newest = Directory.Exists(downloads)
-                ? new DirectoryInfo(downloads).GetFiles("*.opml").OrderByDescending(f => f.LastWriteTime).FirstOrDefault()
-                : null;
-            var dlg = new Microsoft.Win32.OpenFileDialog
-            {
-                Title = "Import feed channels",
-                Filter = "OPML files (*.opml;*.xml)|*.opml;*.xml|All files (*.*)|*.*",
-                InitialDirectory = downloads,
-                FileName = newest?.Name ?? "",
-            };
-            if (dlg.ShowDialog(this) != true) return;
-            try
-            {
-                Mouse.OverrideCursor = Cursors.Wait;
-                var r = await FeedStore.ImportOpmlAsync(dlg.FileName);
-                FeedsPanel.ChannelsChanged();
-                Mouse.OverrideCursor = null;
-                MessageBox.Show(this,
-                    $"Added {r.Added} new channel{(r.Added == 1 ? "" : "s")}.\n{r.AlreadyThere} already in the list" + (r.Skipped > 0 ? $", {r.Skipped} other feeds skipped (only YouTube channels are imported)." : "."),
-                    "Browse", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                Mouse.OverrideCursor = null;
-                MessageBox.Show(this, "Could not import: " + ex.Message, "Browse", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        private void ImportFeedChannels_Click(object sender, RoutedEventArgs e)
-        {
-            int added = FeedsPanel.ReimportChannels();
-            MessageBox.Show(this, added == 0 ? "No new channels in SebiTool." : $"Added {added} channels from SebiTool.", "Browse", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
 
         // F11: the whole window becomes the page (tabs, toolbar and bookmarks hidden); F11 again brings everything back.
         private bool _manualFullscreen;
@@ -603,10 +666,14 @@ namespace Browse
         private void ApplyProfile()
         {
             bool priv = _store.Profile == BrowserStore.Private;
+            // Feeds exists only in Private: leaving Private also leaves the Feeds page and hides its button.
+            if (!priv && _feedsMode) SetFeedsMode(false);
+            FeedsButton.Visibility = priv ? Visibility.Visible : Visibility.Collapsed;
             BookmarkBar.ItemsSource = _store.ActiveBookmarks;
+            if (IsLoaded) _ = RefreshServersAsync();
             // Label panel / darker icon panel / icon (briefcase for Work, lock for Private) of the profile chip.
             ProfileButton.Content = _store.Profile;
-            ProfileButton.ToolTip = $"{_store.Profile} bookmarks - click to switch to {(priv ? BrowserStore.Work : BrowserStore.Private)}";
+            ProfileButton.ToolTip = priv ? $"{_store.Profile} bookmarks - click to switch to {BrowserStore.Work}" : null; // Work gives no hint that Private exists
             ProfileButton.Background = ChipBrush(priv ? "#8E4EC6" : "#3B6FD9");
             ProfileButton.BorderBrush = ChipBrush(priv ? "#5E2D8C" : "#1F4FA8");
             ProfileButton.Tag = priv ? "" : "";
@@ -615,8 +682,10 @@ namespace Browse
         }
 
         // A toggle: each click switches to the other profile.
+        // Private is a hidden switch: from Work only Ctrl+Alt+click enters it; a plain click does nothing. Leaving Private needs no keys.
         private void Profile_Click(object sender, RoutedEventArgs e)
         {
+            if (_store.Profile != BrowserStore.Private && Keyboard.Modifiers != (ModifierKeys.Control | ModifierKeys.Alt)) return;
             CloseFolderMenu(); // an open folder panel belongs to the profile being left
             string from = _store.Profile;
             _store.Profile = from == BrowserStore.Private ? BrowserStore.Work : BrowserStore.Private;
@@ -627,7 +696,9 @@ namespace Browse
 
         private string Normalize(string input)
         {
-            input = input.Trim();
+            input = input.Trim().Trim('"');
+            if (Path.IsPathRooted(input) && !input.Contains("://") && File.Exists(input))
+                return new Uri(input).AbsoluteUri; // double-clicked / dropped local file
             bool hasScheme = input.Contains("://") || input.StartsWith("about:") || input.StartsWith("edge:") || input.StartsWith("file:");
             if (hasScheme) return input;
             bool looksLikeHost = !input.Contains(' ') && (input.Contains('.') || input.StartsWith("localhost"));
@@ -637,6 +708,7 @@ namespace Browse
 
         private void Navigate(string input)
         {
+            if (_current is { IsSettings: true } && !string.IsNullOrWhiteSpace(input)) { Suggestions.IsOpen = false; OpenTab(Normalize(input)); return; } // Settings has no page to navigate
             if (_current?.View.CoreWebView2 is not { } c || string.IsNullOrWhiteSpace(input)) return;
             Suggestions.IsOpen = false;
             SetFeedsMode(false); // an address typed or a bookmark clicked leaves the Feeds page
@@ -731,7 +803,7 @@ namespace Browse
             string what = b.Children != null
                 ? $"folder \"{b.Title}\" and its {BrowserStore.Flatten(b.Children).Count()} bookmarks"
                 : $"bookmark \"{b.Title}\"";
-            if (MessageBox.Show(this, $"Delete {what}?", "Browse", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+            if (!Views.ConfirmWindow.Ask(this, $"Delete {what}?")) return;
             CloseFolderMenu(); // its list would still show the deleted bookmark
             _store.RemoveBookmark(b);
             UpdateChrome();
@@ -887,9 +959,9 @@ namespace Browse
         {
             bool folder = b.Children != null;
             // Same colours as the chips on the bar: folders dark blue with white text, links the unselected-tab slate with light text.
-            Brush fg = folder ? Brushes.White : ChipBrush("#E7EDF5");
-            var fill = ChipBrush(folder ? "#0B2A5B" : "#1A2332");
-            var hover = ChipBrush(folder ? "#123A7A" : "#232F42");
+            Brush fg = ThemeService.Brush(folder ? "ThemeFolderText" : "ThemeChipText");
+            var fill = ThemeService.Brush(folder ? "ThemeFolder" : "ThemeChip");
+            var hover = ThemeService.Brush(folder ? "ThemeFolderHover" : "ThemeChipHover");
 
             // Two separate panels side by side: the icon tile (yellow folder on a darker navy, or the page's icon on the same
             // slate as the label) and, next to it, the label panel. The label panel's text and arrow share one Grid.
@@ -898,7 +970,7 @@ namespace Browse
             var tile = new Border
             {
                 Width = 32, CornerRadius = new CornerRadius(4), Margin = new Thickness(0, 0, 3, 0),
-                Background = ChipBrush(folder ? "#08204A" : "#1A2332"), Child = image,
+                Background = ThemeService.Brush(folder ? "ThemeFolder" : "ThemeChipIcon"), Child = image,
             };
 
             var labelGrid = new Grid { MinWidth = 190 };
@@ -1221,39 +1293,6 @@ namespace Browse
             Loaded += (_, _) => { if (_store.SyncFile is { Length: > 0 } file) _ = _sync.StartAsync(file); };
         }
 
-        private void Sync_SubmenuOpened(object sender, RoutedEventArgs e)
-        {
-            if (e.OriginalSource != SyncItem || _sync == null) return;
-            SyncItem.Items.Clear();
-
-            SyncItem.Items.Add(new MenuItem { Header = new TextBlock { Text = _sync.IsRunning ? $"{_sync.Status}" : _sync.Status, MaxWidth = 420, TextWrapping = TextWrapping.Wrap }, IsEnabled = false });
-            if (_sync.IsRunning)
-                SyncItem.Items.Add(new MenuItem { Header = new TextBlock { Text = _sync.FilePath, MaxWidth = 420, TextTrimming = TextTrimming.CharacterEllipsis }, IsEnabled = false });
-            SyncItem.Items.Add(new Separator());
-
-            if (_sync.IsRunning)
-            {
-                var now = new MenuItem { Header = "Sync now" };
-                now.Click += async (_, _) => await _sync.SyncNowAsync();
-                SyncItem.Items.Add(now);
-            }
-            else
-            {
-                var useDefault = new MenuItem { Header = "Sync with the default file (Install Kits\\2026\\Browser_Bookmarks)" };
-                useDefault.Click += (_, _) => StartSync(AppConfig.DefaultSyncFile);
-                SyncItem.Items.Add(useDefault);
-            }
-            var choose = new MenuItem { Header = "Choose another file…" };
-            choose.Click += (_, _) => ChooseSyncFile();
-            SyncItem.Items.Add(choose);
-            if (_sync.IsRunning)
-            {
-                var off = new MenuItem { Header = "Turn sync off" };
-                off.Click += (_, _) => { _sync.Stop(); _store.SyncFile = null; _store.SaveSoon(); };
-                SyncItem.Items.Add(off);
-            }
-        }
-
         private void ChooseSyncFile()
         {
             // The dialog opens in the pre-filled folder (or OneDrive) with the default file name; an existing file is fine, it is not overwritten.
@@ -1278,35 +1317,6 @@ namespace Browse
             _store.SyncFile = file;
             _store.SaveSoon();
             _ = _sync!.StartAsync(file);
-        }
-
-        // ---------- Edge import ----------
-
-        private void Import_SubmenuOpened(object sender, RoutedEventArgs e)
-        {
-            if (e.OriginalSource != ImportItem) return;
-            ImportItem.Items.Clear();
-            var profiles = EdgeImport.Profiles();
-            if (profiles.Count == 0) ImportItem.Items.Add(new MenuItem { Header = "No Edge profiles found", IsEnabled = false });
-            foreach (var p in profiles)
-            {
-                var mi = new MenuItem { Header = new TextBlock { Text = $"{p.Name} ({p.Count}) → {_store.Profile}" } };
-                mi.Click += (_, _) => ImportFromEdge(p);
-                ImportItem.Items.Add(mi);
-            }
-        }
-
-        private void ImportFromEdge(EdgeImport.EdgeProfile p)
-        {
-            try
-            {
-                int added = _store.ImportBookmarks(EdgeImport.Read(p.Dir));
-                MessageBox.Show(this, $"Imported {added} bookmarks into {_store.Profile}.", "Browse", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, "Import failed: " + ex.Message, "Browse", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
         }
 
         // ---------- Address bar suggestions (bookmarks + history) ----------
@@ -1380,7 +1390,7 @@ namespace Browse
             if (!ctrl || alt) return null;
             return key switch
             {
-                Key.T when shift => () => { if (_closed.TryPop(out var url)) OpenTab(url); },
+                Key.T when shift => ReopenClosedTab,
                 Key.T => NewBlankTab,
                 Key.W => () => { if (_feedsMode) SetFeedsMode(false); else if (_current != null) CloseTab(_current); }, // never closes a tab you cannot see
                 Key.L => FocusAddress,
@@ -1400,23 +1410,43 @@ namespace Browse
 
         // ---------- Menu ----------
 
+        // The gear opens Settings as a tab (one per profile): it selects the existing Settings tab, or adds it. Clicking the gear
+        // while on the Settings tab closes it again.
+        private bool _settingsMode => _current?.IsSettings == true;
+
         private void Menu_Click(object sender, RoutedEventArgs e)
         {
-            MainMenu.PlacementTarget = (Button)sender;
-            MainMenu.IsOpen = true;
+            SetFeedsMode(false);
+            CloseFolderMenu();
+            if (_current is { IsSettings: true } open) { CloseTab(open); return; }
+            var tab = _tabs.FirstOrDefault(t => t.IsSettings);
+            if (tab == null)
+            {
+                tab = new BrowserTab(new WebView2 { Visibility = Visibility.Collapsed }) { IsSettings = true, Title = "Settings" };
+                Host.Children.Add(tab.View);
+                _tabs.Add(tab);
+            }
+            TabStrip.SelectedItem = tab;
         }
 
-        private void History_Click(object sender, RoutedEventArgs e) => ShowHistory();
-        private void Downloads_Click(object sender, RoutedEventArgs e) => _current?.View.CoreWebView2?.OpenDefaultDownloadDialog();
-        private void DevTools_Click(object sender, RoutedEventArgs e) => _current?.View.CoreWebView2?.OpenDevToolsWindow();
-
-        private async void ClearData_Click(object sender, RoutedEventArgs e)
+        private void InitSettings()
         {
-            if (MessageBox.Show(this, "Clear history, cookies, cache and site data?", "Browse", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK) return;
-            _store.ClearHistory();
-            if (_current?.View.CoreWebView2 is { } c) await c.Profile.ClearBrowsingDataAsync();
+            SettingsPanel.Version = $"Browse v{Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)}";
+            SettingsPanel.SyncStateProvider = () => new(_sync?.Status ?? "Off", _sync?.FilePath, _sync?.IsRunning ?? false);
+            SettingsPanel.SyncNowRequested += async () => { if (_sync != null) await _sync.SyncNowAsync(); };
+            SettingsPanel.SyncDefaultRequested += () => StartSync(AppConfig.DefaultSyncFile);
+            SettingsPanel.SyncChooseRequested += ChooseSyncFile;
+            SettingsPanel.SyncOffRequested += () => { _sync?.Stop(); _store.SyncFile = null; _store.SaveSoon(); };
+            SettingsPanel.FetchIconsRequested += () => FetchIcons_Click(this, null!);
+            SettingsPanel.TabEffect = _store.TabEffect;
+            SettingsPanel.TabEffectChanged += effect => { _store.TabEffect = effect; _store.SaveSoon(); };
+            SettingsPanel.ThemeRequested +=() => Theme_Click(this, null!);
+            SettingsPanel.CheckUpdatesRequested += () => CheckUpdates_Click(this, null!);
         }
 
+        private void Theme_Click(object sender, RoutedEventArgs e) => new Views.ThemeWindow { Owner = this }.Show();
+
+        private void Downloads_Click(object sender, RoutedEventArgs e) => _current?.View.CoreWebView2?.OpenDefaultDownloadDialog();
         // ---------- Updates & shutdown ----------
 
         private void StartUpdateChecks()
@@ -1432,6 +1462,30 @@ namespace Browse
         {
             try { if (await _updates!.CheckAsync()) UpdateButton.Visibility = Visibility.Visible; }
             catch { /* silent: next timer tick or launch retries */ }
+        }
+
+        private async void CheckUpdates_Click(object sender, RoutedEventArgs e)
+        {
+            if (_updates is not { IsInstalled: true })
+            {
+                MessageBox.Show(this, "Updates only work in the installed version of Browse.", "Browse", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            try
+            {
+                if (!await _updates.CheckAsync())
+                {
+                    MessageBox.Show(this, "You are up to date.", "Browse", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                UpdateButton.Visibility = Visibility.Visible;
+                if (MessageBox.Show(this, "An update has been downloaded. Restart Browse now to install it?", "Browse", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    Update_Click(sender, e);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Could not check for updates: " + ex.Message, "Browse", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
 
         // The session is restored after the restart, so applying an update is non-destructive.
@@ -1450,11 +1504,13 @@ namespace Browse
                 if (profile == BrowserStore.Private) { _store.PrivateSession = urls; _store.PrivateSessionIndex = index; }
                 else { _store.Session = urls; _store.SessionIndex = index; }
             }
-            List<string> UrlsOf(IEnumerable<BrowserTab> tabs) => tabs.Select(t => t.Url).Where(u => u.Length > 0).ToList();
+            List<string> UrlsOf(IEnumerable<BrowserTab> tabs) => tabs.Where(t => !t.IsSettings).Select(t => t.Url).Where(u => u.Length > 0).ToList();
+            // The Settings tab is not saved, so tabs before the selected one that are Settings do not count in the saved index.
+            int IndexOf(List<BrowserTab> tabs, int selected) => Math.Max(0, tabs.Take(Math.Max(0, selected)).Count(t => !t.IsSettings));
 
-            Put(_store.Profile, UrlsOf(_tabs), Math.Max(0, TabStrip.SelectedIndex));
+            Put(_store.Profile, UrlsOf(_tabs), IndexOf(_tabs.ToList(), TabStrip.SelectedIndex));
             string other = _store.Profile == BrowserStore.Private ? BrowserStore.Work : BrowserStore.Private;
-            if (_parkedTabs.TryGetValue(other, out var parked)) Put(other, UrlsOf(parked), _parkedIndex.GetValueOrDefault(other));
+            if (_parkedTabs.TryGetValue(other, out var parked)) Put(other, UrlsOf(parked), IndexOf(parked, _parkedIndex.GetValueOrDefault(other)));
             _store.Save();
         }
 

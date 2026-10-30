@@ -10,6 +10,7 @@ The Windows app lives in the repository root (`*.xaml`, `Services/`, ...). Every
 | `../docs/DESIGN.md`        | Colours, sizes, layout, popups, the Feeds page - the look to match. |
 | `../docs/FEATURES.md`      | Every feature with its exact rules and numbers - the behaviour to match. |
 | `../docs/SYNC-FORMAT.md`   | The sync file format and rules (the contract between the two apps). |
+| `WINDOWS-CHANGES.md`       | **Read first on every pull**: what changed on Windows and what the Mac must change to stay compatible (latest: sync must not merge on every start). |
 | `../docs/sync-samples/`    | Sample sync files, merge scenarios with expected results, and the `isNewer` cases, to unit-test the Swift sync against. |
 
 ## Plan

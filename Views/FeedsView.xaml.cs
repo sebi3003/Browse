@@ -81,7 +81,7 @@ namespace Browse.Views
         {
             int n = folder.Channels.Count;
             string what = n == 0 ? $"the empty folder \"{folder.Title}\"" : $"the folder \"{folder.Title}\" and its {(n == 1 ? "1 channel" : $"{n} channels")}";
-            if (MessageBox.Show(Window.GetWindow(this), $"Remove {what}?", "Browse", MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+            if (!ConfirmWindow.Ask(Window.GetWindow(this), $"Remove {what}?", "Remove")) return;
             FeedStore.RemoveFolder(folder.Title);
             _data = FeedStore.Load();                       // pick up the change, so a later save here cannot bring it back
             if (_data.LastFolder == folder.Title) _data.LastFolder = "";
@@ -92,8 +92,7 @@ namespace Browse.Views
         private void RemoveChannel(FeedChannel channel)
         {
             string where = string.IsNullOrEmpty(channel.FolderName) ? "Unsorted" : channel.FolderName;
-            if (MessageBox.Show(Window.GetWindow(this), $"Remove the channel \"{channel.Title}\" from the folder \"{where}\"?", "Browse",
-                    MessageBoxButton.OKCancel, MessageBoxImage.Warning, MessageBoxResult.Cancel) != MessageBoxResult.OK) return;
+            if (!ConfirmWindow.Ask(Window.GetWindow(this), $"Remove the channel \"{channel.Title}\" from the folder \"{where}\"?", "Remove")) return;
             FeedStore.RemoveChannel(channel.XmlUrl);
             _data = FeedStore.Load();
             RebuildFolders();                               // stays in the same folder (LastFolder is still it)

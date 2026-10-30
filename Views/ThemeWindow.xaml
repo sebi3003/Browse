@@ -1,0 +1,99 @@
+<Window x:Class="Browse.Views.ThemeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Theme colours" Width="960" Height="560" WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="#0A0C10" FontFamily="Segoe UI" FontSize="14" PreviewKeyDown="Window_PreviewKeyDown">
+    <!-- Left: a small copy of the browser. Click any part of it to pick that part. Right: the colour of the picked part, set with
+         the colour wheel (hue and saturation), the brightness and opacity sliders, or a hex code. Changes apply to the real window
+         immediately and are saved. This window keeps its own fixed dark colours. -->
+    <Window.Resources>
+        <Style x:Key="DlgButton" TargetType="Button">
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Foreground" Value="#E7EDF5"/>
+            <Setter Property="Background" Value="#1A2332"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="B" CornerRadius="4" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="B" Property="Background" Value="#232F42"/></Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DlgThumb" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Ellipse Width="16" Height="16" Fill="#E7EDF5" Stroke="#0A0C10" StrokeThickness="2"/>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="Slider">
+            <Setter Property="Height" Value="22"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Slider">
+                        <Grid>
+                            <Border Height="6" CornerRadius="3" Background="#2A3441" VerticalAlignment="Center"/>
+                            <Track x:Name="PART_Track">
+                                <Track.DecreaseRepeatButton><RepeatButton Command="Slider.DecreaseLarge" Style="{StaticResource ScrollPage}"/></Track.DecreaseRepeatButton>
+                                <Track.Thumb><Thumb Style="{StaticResource DlgThumb}"/></Track.Thumb>
+                                <Track.IncreaseRepeatButton><RepeatButton Command="Slider.IncreaseLarge" Style="{StaticResource ScrollPage}"/></Track.IncreaseRepeatButton>
+                            </Track>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/><ColumnDefinition Width="300"/>
+        </Grid.ColumnDefinitions>
+
+        <Border x:Name="MockRoot" Margin="12" CornerRadius="6" BorderThickness="2" BorderBrush="Transparent" Padding="10" PreviewMouseLeftButtonDown="Mock_Click">
+            <StackPanel x:Name="Mock" VerticalAlignment="Top"/>
+        </Border>
+
+        <StackPanel Grid.Column="1" Margin="0,12,12,12">
+            <TextBlock x:Name="NameText" Foreground="#E7EDF5" FontSize="16" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+            <Grid Width="180" Height="180" x:Name="WheelHost" Background="Transparent" Cursor="Cross"
+                  MouseLeftButtonDown="Wheel_Down" MouseMove="Wheel_Move" MouseLeftButtonUp="Wheel_Up">
+                <Image x:Name="WheelImage" Width="180" Height="180"/>
+                <Canvas Width="180" Height="180" IsHitTestVisible="False">
+                    <Ellipse x:Name="WheelMarker" Width="14" Height="14" Stroke="White" StrokeThickness="2" Fill="Transparent"/>
+                </Canvas>
+            </Grid>
+
+            <TextBlock Text="Brightness" Foreground="#9AA0A6" FontSize="12" Margin="0,10,0,0"/>
+            <Slider x:Name="ValueSlider" Minimum="0" Maximum="1" ValueChanged="Slider_Changed"/>
+            <TextBlock Text="Opacity" Foreground="#9AA0A6" FontSize="12"/>
+            <Slider x:Name="AlphaSlider" Minimum="0" Maximum="255" ValueChanged="Slider_Changed"/>
+
+            <Grid Margin="0,10,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Border x:Name="Swatch" Width="30" Height="30" CornerRadius="4" BorderBrush="#3A4656" BorderThickness="1" Margin="0,0,8,0"/>
+                <TextBox x:Name="HexBox" Grid.Column="1" Background="#1A2332" Foreground="#E7EDF5" CaretBrush="#E7EDF5" SelectionBrush="#5C8AF2" BorderBrush="#2B4F94" Height="30"
+                         VerticalContentAlignment="Center" Padding="8,0" TextChanged="HexBox_TextChanged" ToolTip="#RRGGBB or #AARRGGBB"/>
+                <Button x:Name="PipetteButton" Grid.Column="2" Width="30" Margin="8,0,0,0" Style="{StaticResource DlgButton}" Content="&#xEF3C;"
+                        FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Click="Pipette_Click" ToolTip="Pipette: click it, then click another part of the preview to copy its colour"/>
+            </Grid>
+
+            <Grid Margin="0,12,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Button Content="Reset this" Style="{StaticResource DlgButton}" Click="ResetOne_Click"/>
+                <Button Grid.Column="2" Content="Reset all" Style="{StaticResource DlgButton}" Click="ResetAll_Click"/>
+            </Grid>
+            <TextBlock Text="Click any part of the preview to change its colour. The real window changes as you go." Foreground="#9AA0A6" FontSize="12" TextWrapping="Wrap" Margin="0,12,0,0"/>
+        </StackPanel>
+    </Grid>
+</Window>

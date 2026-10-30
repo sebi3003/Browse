@@ -13,6 +13,8 @@ namespace Browse
         {
             VelopackApp.Build().Run();
 
+            Services.FileAssociation.Register();
+
             var app = new App();
             app.InitializeComponent();
             app.DispatcherUnhandledException += (_, e) => { LogCrash("UI thread", e.Exception); e.Handled = true; };

@@ -8,6 +8,8 @@ namespace Browse.Services
         private readonly UpdateManager _mgr = new(new GithubSource(repoUrl, accessToken, prerelease: false));
         private UpdateInfo? _pending;
 
+        public bool IsInstalled => _mgr.IsInstalled;
+
         /// <summary>Checks for and downloads a newer release. Returns true once one is ready to apply.</summary>
         public async Task<bool> CheckAsync()
         {
