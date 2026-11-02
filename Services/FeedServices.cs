@@ -9,7 +9,7 @@ using Browse.Models;
 
 namespace Browse.Services
 {
-    /// <summary>Channel icons for the Feeds page, downloaded by WPF in the background and kept for the session.</summary>
+    /// <summary>Thumbnails for the Feeds page, downloaded by WPF in the background and kept for the session.</summary>
     public static class ImageCache
     {
         private static readonly ConcurrentDictionary<string, ImageSource> Cache = new();
@@ -57,6 +57,7 @@ namespace Browse.Services
             // only exist on channels are appended after these, so older files work unchanged.
             public List<string> Folders { get; set; } = [];
             public string LastFolder { get; set; } = "";
+            public string Filter { get; set; } = "week";
         }
 
         public static Data Load()
@@ -270,5 +271,103 @@ namespace Browse.Services
 
             return order.Select(n => new FeedFolder(n, byFolder.TryGetValue(n, out var list) ? list : [])).ToList();
         }
+    }
+
+    /// <summary>
+    /// Reads a channel's latest videos from its YouTube videos page (YouTube's RSS feeds no longer exist). The page carries its
+    /// video list as JSON (<c>ytInitialData</c>), with ages as "3 days ago" only, so the dates are approximate. Results are kept
+    /// for a few minutes so switching folders is quick.
+    /// </summary>
+    public static class FeedFetchService
+    {
+        private static readonly HttpClient Http = CreateClient();
+        private static readonly ConcurrentDictionary<string, (DateTime At, List<FeedVideo> Items)> Cache = new();
+        private static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(10);
+        private static readonly System.Text.RegularExpressions.Regex DataRx = new(@"var ytInitialData = (\{.*?\});</script>", System.Text.RegularExpressions.RegexOptions.Singleline);
+        private static readonly System.Text.RegularExpressions.Regex AgeRx = new(@"(\d+)\s*(second|minute|hour|day|week|month|year)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+        private static HttpClient CreateClient()
+        {
+            var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36");
+            http.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9"); // the ages are read as English ("3 days ago")
+            http.DefaultRequestHeaders.Add("Cookie", "CONSENT=YES+1; SOCS=CAI");   // skips the cookie-consent page
+            return http;
+        }
+
+        public static void ClearCache() => Cache.Clear();
+
+        public static async Task<List<FeedVideo>> FetchAsync(FeedChannel channel)
+        {
+            string url = channel.VideosUrl;
+            if (url.Length == 0) throw new InvalidOperationException("no channel address");
+            if (Cache.TryGetValue(url, out var hit) && DateTime.UtcNow - hit.At < MaxAge) return hit.Items;
+
+            var m = DataRx.Match(await Http.GetStringAsync(url));
+            if (!m.Success) throw new InvalidOperationException("no video data on the channel page");
+            using var doc = JsonDocument.Parse(m.Groups[1].Value);
+
+            var now = DateTime.UtcNow;
+            var items = new List<FeedVideo>();
+            void Walk(JsonElement e)
+            {
+                switch (e.ValueKind)
+                {
+                    case JsonValueKind.Object:
+                        if (e.TryGetProperty("lockupViewModel", out var lockup) && ReadVideo(lockup, now) is { } v) { items.Add(v); return; }
+                        foreach (var p in e.EnumerateObject()) Walk(p.Value);
+                        break;
+                    case JsonValueKind.Array:
+                        foreach (var x in e.EnumerateArray()) Walk(x);
+                        break;
+                }
+            }
+            Walk(doc.RootElement);
+
+            Cache[url] = (now, items);
+            return items;
+        }
+
+        private static FeedVideo? ReadVideo(JsonElement lockup, DateTime now)
+        {
+            if (Str(lockup, "contentType") != "LOCKUP_CONTENT_TYPE_VIDEO") return null;
+            string id = Str(lockup, "contentId");
+            if (id.Length == 0 || !lockup.TryGetProperty("metadata", out var meta1) || !meta1.TryGetProperty("lockupMetadataViewModel", out var meta)) return null;
+            string title = meta.TryGetProperty("title", out var t) ? Str(t, "content") : "";
+
+            DateTime? published = null;
+            bool live = false;
+            if (meta.TryGetProperty("metadata", out var m1) && m1.TryGetProperty("contentMetadataViewModel", out var m2) && m2.TryGetProperty("metadataRows", out var rows))
+                foreach (var row in rows.EnumerateArray())
+                    if (row.TryGetProperty("metadataParts", out var parts))
+                        foreach (var part in parts.EnumerateArray())
+                        {
+                            string text = part.TryGetProperty("text", out var tx) ? Str(tx, "content") : "";
+                            string label = Str(part, "accessibilityLabel");
+                            if (text.Contains("watching", StringComparison.OrdinalIgnoreCase)) live = true;
+                            var age = AgeRx.Match(label.Length > 0 ? label : text);
+                            if (published == null && age.Success && (text.Contains("ago", StringComparison.OrdinalIgnoreCase) || label.Contains("ago", StringComparison.OrdinalIgnoreCase)))
+                            {
+                                int n = int.Parse(age.Groups[1].Value);
+                                published = now - age.Groups[2].Value.ToLowerInvariant() switch
+                                {
+                                    "second" => TimeSpan.FromSeconds(n), "minute" => TimeSpan.FromMinutes(n), "hour" => TimeSpan.FromHours(n),
+                                    "day" => TimeSpan.FromDays(n), "week" => TimeSpan.FromDays(7 * n), "month" => TimeSpan.FromDays(30 * n),
+                                    _ => TimeSpan.FromDays(365 * n),
+                                };
+                            }
+                        }
+            if (live) published = now;       // a stream that is on right now
+            if (published == null) return null; // scheduled or premiering later: nothing to show yet
+
+            return new FeedVideo
+            {
+                Title = title.Length > 0 ? title : "Untitled", VideoId = id, Published = published,
+                Link = $"https://www.youtube.com/watch?v={id}", ThumbnailUrl = $"https://i.ytimg.com/vi/{id}/mqdefault.jpg",
+            };
+        }
+
+        private static string Str(JsonElement e, string name) =>
+            e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() ?? "" : "";
     }
 }

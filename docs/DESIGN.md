@@ -27,7 +27,7 @@ One near-black background everywhere; panels carry the colour.
 | `Navy hover`     | `#123A7A`  | Hover of navy panels. |
 | Tab              | `#3E6B52`  | Unselected tab label (hover `#4A7D61`); text `#E7EDF5`. |
 | Tab selected     | `#5A9472`  | Selected tab label; text white. |
-| `Selected`       | `#2B4F94`  | Selected Feeds item; text white. |
+| `Selected`       | `#2B4F94`  | Selected Feeds item, active filter chip; text white. |
 | Focus blue       | `#5C8AF2`  | Address panel border while typing, text selection. |
 | Work             | label `#3B6FD9`, tile `#1F4FA8` | Profile toggle in Work. |
 | Private          | label `#8E4EC6`, tile `#5E2D8C` | Profile toggle in Private. |
@@ -77,14 +77,15 @@ Fullscreen (F11): everything but the page hides. Feeds page open: bookmark row, 
   delete (red trash) · cut · paste (only when something is cut) · open in new tab · copy link.
 * Drag-drop marker: 3 wide white line between chips, or a 2 white outline around a folder to drop into.
 
-## 6. Feeds page (three columns)
+## 6. Feeds page (four columns)
 
-Gap 6 around and between; draggable dividers. Widths (default): folders 210, channels 300, player = rest.
+Gap 6 around and between; draggable dividers. Widths (default): folders 210, channels 300, videos 470, player = rest.
 Every column starts with a 32 high header panel.
 
 * **Folders:** header navy "Folders" + a 32×32 navy **＋** tile. Items 32 high, navy label, white text, channel count at the right (`#9FB4D9`, 12). Selected `#2B4F94`.
-* **Channels:** items **64 high**: square thumbnail panel 64×64 (channel picture, or the initial letter on slate) + slate label (title 14 semibold, up to 2 lines). No counts, no fading, no videos column and no filter chips.
-* **Player:** header panel = channel name, then the YouTube page title ("Pick a channel" at first); below it the channel's YouTube videos page. The video's own fullscreen takes the whole window.
+* **Channels:** items **64 high**: square thumbnail panel 64×64 (channel picture, or the initial letter on slate) + slate label (title 14 semibold, "N videos" 12 muted). Channels with nothing in the filter are faded to 50 %.
+* **Videos:** header = chips *Today · Week · Last 5 · All · Refresh* (32 high, slate; active = `#2B4F94`) + a muted status text. Items **64 high**: thumbnail panel 114×64 (16:9) + slate label (title up to 2 lines, then "Channel · age" 12 muted).
+* **Player:** header panel = "title — channel"; below it the YouTube page. The video's own fullscreen takes the whole window.
 
 ## 7. Settings page and theme
 

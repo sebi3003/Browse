@@ -6,7 +6,7 @@ server and no shared code, so two implementations stay compatible only if they f
 
 What is synced: both profiles' bookmarks (folders, order), the Feeds channel list and the Feeds folder list (empty folders included),
 and the theme colours (Settings → Theme colours, see "Theme").
-What is **not** synced: open tabs, history, cookies/logins, caches, favicons, the Feeds page's last folder, window state.
+What is **not** synced: open tabs, history, cookies/logins, caches, favicons, the Feeds page's last folder/filter, window state.
 
 ---------------------------------------------------------------------------------------------------------------------------------------
 
@@ -58,7 +58,7 @@ explicitly; do not rely on it being present).
 | Property       | Type   | Meaning |
 |----------------|--------|---------|
 | `Title`        | string | Channel name. |
-| `XmlUrl`       | string | YouTube RSS address `https://www.youtube.com/feeds/videos.xml?channel_id=UC…`. **The identity of a channel**; compare case-insensitively. |
+| `XmlUrl`       | string | YouTube RSS address `https://www.youtube.com/feeds/videos.xml?channel_id=UC…` (YouTube has shut the feed down, but the address stays: it is the **identity of a channel** and carries the channel id used to open `youtube.com/channel/<id>/videos`); compare case-insensitively. |
 | `HtmlUrl`      | string or null | `https://www.youtube.com/channel/UC…` |
 | `Folder`       | string or null | Folder name. `""`/`null` means the folder that is *displayed* as **`Unsorted`**. |
 | `ThumbnailUrl` | string or null | Channel picture address (may be empty). |

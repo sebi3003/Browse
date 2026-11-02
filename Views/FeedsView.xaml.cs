@@ -12,9 +12,9 @@ using Microsoft.Web.WebView2.Wpf;
 namespace Browse.Views
 {
     /// <summary>
-    /// Feeds: folders, channels and the YouTube page, in three columns. It no longer reads YouTube's RSS feeds (they stopped
-    /// working); it only manages and shows the channels. Picking a channel opens its YouTube videos page in the third column,
-    /// where videos are picked and played like in any tab.
+    /// Feeds: folders, channels, a merged feed of videos, and the YouTube page of the clicked video, in four columns.
+    /// Picking a folder loads the videos pages of all its channels (see FeedFetchService); picking a channel narrows the list; picking a video opens
+    /// its YouTube watch page in the fourth column and starts it.
     /// </summary>
     public partial class FeedsView : UserControl
     {
@@ -25,8 +25,12 @@ namespace Browse.Views
 
         private readonly ObservableCollection<FeedFolder> _folders = [];
         private readonly ObservableCollection<FeedChannel> _channels = [];
+        private readonly ObservableCollection<FeedVideo> _videos = [];
         private FeedStore.Data _data = new();
-        private int _playId;
+        private FeedFolder? _folder;
+        private List<FeedVideo> _folderVideos = [], _filtered = [];
+        private string _filter = "week";
+        private int _loadId, _playId;
         private bool _updating, _started;
         private object? _channelSelectedAtMouseDown;
         private CoreWebView2CreationProperties? _props;
@@ -37,6 +41,7 @@ namespace Browse.Views
             InitializeComponent();
             FolderList.ItemsSource = _folders;
             ChannelList.ItemsSource = _channels;
+            VideoList.ItemsSource = _videos;
             ChannelList.PreviewMouseLeftButtonDown += (_, _) => _channelSelectedAtMouseDown = ChannelList.SelectedItem;
             FolderList.MouseRightButtonUp += FolderList_RightClick;
             ChannelList.MouseRightButtonUp += ChannelList_RightClick;
@@ -102,6 +107,7 @@ namespace Browse.Views
             if (_started) return;
             _started = true;
             _data = FeedStore.Load();
+            _filter = _data.Filter is "today" or "week" or "last5" or "all" ? _data.Filter : "week";
             RebuildFolders();
         }
 
@@ -110,9 +116,9 @@ namespace Browse.Views
         {
             _playId++;
             if (_player?.CoreWebView2 is { } c) c.Navigate("about:blank");
-            NowPlaying.Text = "Pick a channel";
+            NowPlaying.Text = "Pick a video";
             _updating = true;
-            ChannelList.SelectedItem = null; // so picking the same channel again opens it again
+            VideoList.SelectedItem = null; // so picking the same video again plays it again
             _updating = false;
         }
 
@@ -144,10 +150,10 @@ namespace Browse.Views
             _data.LastFolder = folderName;     // and show the new (or already existing) folder
             FeedStore.Save(_data);
             RebuildFolders();
-            if (!created) NowPlaying.Text = $"\"{folderName}\" already exists";
+            if (!created) StatusText.Text = $"\"{folderName}\" already exists";
         }
 
-        // ---------- folders and channels ----------
+        // ---------- folders, channels, videos ----------
 
         private void RebuildFolders()
         {
@@ -156,48 +162,143 @@ namespace Browse.Views
             _folders.Clear();
             foreach (var f in folders) _folders.Add(f);
             _updating = false;
+            UpdateChips();
             FolderList.SelectedItem = folders.FirstOrDefault(f => f.Title == _data.LastFolder) ?? folders.FirstOrDefault();
-            if (folders.Count == 0) NowPlaying.Text = "No channels yet - add them from a YouTube tab's right-click menu";
+            if (folders.Count == 0) StatusText.Text = "No channels yet (none found in SebiTool)";
         }
 
         private void FolderList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_updating || FolderList.SelectedItem is not FeedFolder folder) return;
+            _folder = folder;
             _data.LastFolder = folder.Title;
             FeedStore.Save(_data);
+            _ = LoadFolderAsync(folder);
+        }
+
+        private async Task LoadFolderAsync(FeedFolder folder)
+        {
+            int id = ++_loadId;
+            StatusText.Text = "Loading…";
+            using var gate = new SemaphoreSlim(8);
+            var results = await Task.WhenAll(folder.Channels.Select(async ch =>
+            {
+                await gate.WaitAsync();
+                try
+                {
+                    var items = await FeedFetchService.FetchAsync(ch);
+                    foreach (var v in items) v.Channel = ch;
+                    ch.Failed = false;
+                    return items;
+                }
+                catch
+                {
+                    ch.Failed = true; // shown on the channel, so a missing feed is not mistaken for "nothing new"
+                    return new List<FeedVideo>();
+                }
+                finally { gate.Release(); }
+            }));
+            if (id != _loadId) return; // another folder was picked meanwhile
+            _folderVideos = results.SelectMany(x => x).ToList();
+            ApplyFilter();
+        }
+
+        private void ApplyFilter()
+        {
+            if (_folder == null) return;
+            var keep = ChannelList.SelectedItem as FeedChannel;
+
+            IEnumerable<FeedVideo> q = _folderVideos;
+            q = _filter switch
+            {
+                "today" => q.Where(v => v.Published?.ToLocalTime().Date == DateTime.Now.Date),
+                "week" => q.Where(v => v.Published >= DateTime.UtcNow.AddDays(-7)),
+                "last5" => q.GroupBy(v => v.Channel).SelectMany(g => g.OrderByDescending(v => v.Published ?? DateTime.MinValue).Take(5)),
+                _ => q,
+            };
+            _filtered = q.OrderByDescending(v => v.Published ?? DateTime.MinValue).ToList();
+
+            foreach (var ch in _folder.Channels) ch.Count = _filtered.Count(v => ReferenceEquals(v.Channel, ch));
             _updating = true;
             _channels.Clear();
-            foreach (var ch in folder.Channels) _channels.Add(ch);
+            foreach (var ch in _folder.Channels) _channels.Add(ch); // every channel of the folder; those with nothing in this filter are faded
+            ChannelList.SelectedItem = keep != null && _channels.Contains(keep) ? keep : null;
             _updating = false;
-            if (folder.Channels.Count == 0) NowPlaying.Text = "Empty folder - add channels from a YouTube tab's right-click menu";
+            ShowVideos();
+        }
+
+        private void ShowVideos()
+        {
+            var channel = ChannelList.SelectedItem as FeedChannel;
+            var list = channel == null ? _filtered : _filtered.Where(v => ReferenceEquals(v.Channel, channel)).ToList();
+            bool fallback = false;
+            if (channel != null && list.Count == 0)
+            {
+                // A channel you picked is never a dead end (a newly added one may not have posted this week): show its latest videos.
+                list = _folderVideos.Where(v => ReferenceEquals(v.Channel, channel)).OrderByDescending(v => v.Published ?? DateTime.MinValue).Take(5).ToList();
+                fallback = list.Count > 0;
+            }
+            _updating = true;
+            _videos.Clear();
+            foreach (var v in list) _videos.Add(v);
+            _updating = false;
+            StatusText.Text = _folder is { Channels.Count: 0 } ? "empty folder - add channels from a YouTube tab's right-click menu"
+                : fallback ? "nothing in this filter - latest 5" : list.Count == 1 ? "1 video" : $"{list.Count} videos";
         }
 
         private void ChannelList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (!_updating && ChannelList.SelectedItem is FeedChannel channel) _ = OpenChannelAsync(channel);
+            if (!_updating) ShowVideos();
         }
 
-        // Clicking the channel that is already selected opens its page again (the way back after clicking around in the player).
+        // Clicking the channel that is already selected selects none again, which shows the whole folder's feed.
         private void ChannelList_PreviewMouseUp(object sender, MouseButtonEventArgs e)
         {
             if (ItemsControl.ContainerFromElement(ChannelList, e.OriginalSource as DependencyObject) is ListBoxItem { DataContext: FeedChannel ch }
                 && ReferenceEquals(ch, _channelSelectedAtMouseDown))
-                _ = OpenChannelAsync(ch);
+                ChannelList.SelectedItem = null;
         }
 
-        // ---------- the player (3rd column) ----------
+        private void Filter_Click(object sender, RoutedEventArgs e)
+        {
+            _filter = (string)((Button)sender).Tag;
+            _data.Filter = _filter;
+            FeedStore.Save(_data);
+            UpdateChips();
+            ApplyFilter();
+        }
 
-        private async Task OpenChannelAsync(FeedChannel channel)
+        private void Refresh_Click(object sender, RoutedEventArgs e)
+        {
+            FeedFetchService.ClearCache();
+            if (_folder != null) _ = LoadFolderAsync(_folder);
+        }
+
+        private void UpdateChips()
+        {
+            var on = (Brush)FindResource("Selected");
+            var off = (Brush)FindResource("Slate");
+            foreach (var chip in new[] { TodayChip, WeekChip, Last5Chip, AllChip })
+                chip.Background = (string)chip.Tag == _filter ? on : off;
+        }
+
+        // ---------- the player (4th column) ----------
+
+        private void VideoList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_updating && VideoList.SelectedItem is FeedVideo video) _ = PlayAsync(video);
+        }
+
+        private async Task PlayAsync(FeedVideo video)
         {
             int id = ++_playId;
-            NowPlaying.Text = channel.Title;
-            string url = channel.VideosUrl;
-            if (url.Length == 0) { NowPlaying.Text = $"{channel.Title}  -  no channel address"; return; }
+            NowPlaying.Text = video.Channel == null ? video.Title : $"{video.Title}  —  {video.Channel.Title}";
             try
             {
                 if (_player == null) await CreatePlayerAsync();
                 if (id != _playId || _player?.CoreWebView2 is not { } c) return;
-                c.Navigate(url);
+                // The full watch page, not the embeddable player (which refuses to run as a top-level page).
+                c.Navigate($"https://www.youtube.com/watch?v={video.VideoId}");
             }
             catch (Exception ex) { App.LogCrash("feeds player", ex); }
         }
@@ -212,17 +313,8 @@ namespace Browse.Views
             c.Settings.IsPasswordAutosaveEnabled = false;
             c.Settings.IsGeneralAutofillEnabled = false;
             c.NewWindowRequested += (_, e) => e.Handled = true; // no popups out of the player
-            // YouTube moves between its pages without loading a new document, so watch the address as well as the loads.
-            c.SourceChanged += (_, _) => StartIfWatchPage();
-            c.NavigationCompleted += (_, _) => StartIfWatchPage();
-            c.DocumentTitleChanged += (_, _) => { if (!c.DocumentTitle.StartsWith("about:", StringComparison.OrdinalIgnoreCase) && c.DocumentTitle.Length > 0) NowPlaying.Text = c.DocumentTitle; };
+            c.NavigationCompleted += (_, _) => _ = EnsurePlayingAsync(_playId);
             c.ContainsFullScreenElementChanged += (_, _) => SetPlayerFullscreen(c.ContainsFullScreenElement);
-        }
-
-        private void StartIfWatchPage()
-        {
-            if (_player?.CoreWebView2 is { } c && c.Source.Contains("/watch", StringComparison.OrdinalIgnoreCase))
-                _ = EnsurePlayingAsync(++_playId);
         }
 
         // ---------- real fullscreen ----------
@@ -231,7 +323,6 @@ namespace Browse.Views
 
         private bool _playerFullscreen;
         private GridLength[] _savedWidths = [];
-        private const int SideColumns = 4; // folders, divider, channels, divider
 
         /// <summary>The player entered or left fullscreen; the owner should make the window fullscreen accordingly.</summary>
         public event Action<bool>? PlayerFullscreenChanged;
@@ -241,10 +332,10 @@ namespace Browse.Views
             if (on == _playerFullscreen) return;
             _playerFullscreen = on;
             var defs = Columns.ColumnDefinitions;
-            if (on) _savedWidths = defs.Take(SideColumns).Select(d => d.Width).ToArray();
-            for (int i = 0; i < SideColumns; i++) defs[i].Width = on ? new GridLength(0) : _savedWidths[i]; // keeps any widths the user dragged
+            if (on) _savedWidths = defs.Take(6).Select(d => d.Width).ToArray();
+            for (int i = 0; i < 6; i++) defs[i].Width = on ? new GridLength(0) : _savedWidths[i]; // keeps any widths the user dragged
             foreach (UIElement child in Columns.Children)
-                if (Grid.GetColumn(child) < SideColumns) child.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+                if (Grid.GetColumn(child) < 6) child.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
             PlayerHeader.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
             PlayerHost.CornerRadius = on ? new CornerRadius(0) : new CornerRadius(4);
             Columns.Margin = on ? new Thickness(0) : new Thickness(6, 6, 6, 6);
@@ -259,7 +350,7 @@ namespace Browse.Views
             for (int i = 0; i < 24 && id == _playId; i++)
             {
                 await Task.Delay(500);
-                if (id != _playId || _player?.CoreWebView2 is not { } c || !c.Source.Contains("/watch", StringComparison.OrdinalIgnoreCase)) return;
+                if (id != _playId || _player?.CoreWebView2 is not { } c || c.Source.StartsWith("about:", StringComparison.OrdinalIgnoreCase)) return;
                 try
                 {
                     if ((await c.CallDevToolsProtocolMethodAsync("Runtime.evaluate", args)).Contains("\"playing\"")) return;
