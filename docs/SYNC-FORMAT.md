@@ -6,7 +6,7 @@ server and no shared code, so two implementations stay compatible only if they f
 
 What is synced: both profiles' bookmarks (folders, order), the Feeds channel list and the Feeds folder list (empty folders included),
 and the theme colours (Settings → Theme colours, see "Theme").
-What is **not** synced: open tabs, history, cookies/logins, caches, favicons, the Feeds page's last folder/filter, window state.
+What is **not** synced: open tabs, history, cookies/logins, caches, favicons, the Feeds page's last folder, window state.
 
 ---------------------------------------------------------------------------------------------------------------------------------------
 

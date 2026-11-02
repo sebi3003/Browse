@@ -87,16 +87,14 @@ Settings ▸ Bookmark sync: *Sync with the default file* / *Choose another file�
 
 ## 8. Feeds page  [Views/FeedsView, Services/FeedServices, Services/YouTubeChannelService]
 
-* **Data**: channels (`Title`, `XmlUrl`, `HtmlUrl`, `Folder`, `ThumbnailUrl`) and an ordered list of folder names (empty ones too) in `feeds.json`; also remembers the last folder and filter (per machine).
+* **Data**: channels (`Title`, `XmlUrl`, `HtmlUrl`, `Folder`, `ThumbnailUrl`) and an ordered list of folder names (empty ones too) in `feeds.json`; also remembers the last folder (per machine). `XmlUrl` is kept (it carries the channel id, and it is in the sync file) but the feed itself is **no longer fetched**: Google stopped YouTube's RSS feeds, so Feeds is only a channel manager plus a YouTube player.
   First run: the channel list is copied from SebiTool's `channels.json` if it exists (*Add new feed channels from SebiTool* adds later ones).
-* **Opening the page** hides the bookmarks, tabs and page. Picking a folder fetches the Atom feed of **every channel in it** (8 in parallel, 15 s timeout; cached 10 minutes; YouTube Shorts left out),
-  merged and sorted by date. A channel whose feed fails shows "feed unavailable".
-* **Filters** (default *Week*): *Today* (published on today's local date), *Week* (last 7 days), *Last 5* (the 5 newest of each channel), *All*; *Refresh* clears the cache and reloads. Every channel of the folder
-  is listed (those with nothing in the filter faded, "no videos in this filter"). Picking a channel narrows the list to it; clicking it again shows the whole folder. A picked channel with nothing in the
-  filter shows its latest 5 ("nothing in this filter - latest 5").
-* **Playing**: picking a video opens `https://www.youtube.com/watch?v=<id>` in the fourth column (the full page; the embeddable player refuses to run as a top-level page) and **starts it**: after the page loads,
-  `video.play()` is run with the "user gesture" flag, retried every 500 ms up to 24 times until it is playing **[engine: needs a way to start playback without a click]**. The player uses the same profile
-  (cookies) and the same blocking as the tabs; popups from it are dropped. Leaving the Feeds page stops the video. The video's own fullscreen folds away the other columns and makes the window fullscreen.
+* **Opening the page** hides the bookmarks, tabs and page and shows three columns: folders, channels, YouTube. Picking a folder lists its channels (nothing is downloaded).
+* **Playing**: picking a channel opens its videos page `https://www.youtube.com/channel/<id>/videos` (id taken from `XmlUrl`'s `channel_id=`, else from `HtmlUrl`) in the third column; videos are clicked there like in any
+  tab. Clicking the already-selected channel opens its page again (the way back). When the player's address becomes a watch page (`/watch`; YouTube navigates inside one document, so the address change is watched, not only page loads)
+  the video is **started**: `video.play()` is run with the "user gesture" flag, retried every 500 ms up to 24 times until it is playing **[engine: needs a way to start playback without a click]**. The header shows the
+  page title. The player uses the same profile (cookies) and the same blocking as the tabs; popups from it are dropped. Leaving the Feeds page stops the video. The video's own fullscreen folds away the other
+  columns and makes the window fullscreen.
 * **Adding channels**: right-click a **YouTube tab** ▸ *Add channel to folder* ▸ a folder, or *New folder…*. The channel is the page's channel (not the video): found by asking the page
   (`movie_player.getPlayerResponse().videoDetails.channelId` on watch pages, canonical link / meta tags on channel pages), else from the address, else by reading the page's HTML (`"externalId"`, `"channelId"`, `"browseId"`);
   name from the channel's feed, large picture from the channel page's `og:image`. A channel already present (same `XmlUrl`, any case) is reported, not added twice.

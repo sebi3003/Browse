@@ -11,7 +11,7 @@ namespace Browse.Services
     /// conflict copies. Whenever a newer version arrives from another device it replaces the local bookmarks and channels (new ones
     /// appear, deleted ones go); every local change is written to this device's file a couple of seconds later. When several sides
     /// changed, the newest edit wins. The very first sync merges all existing files instead, so nothing local is lost. Before a remote
-    /// version overwrites the local data, the local data is saved to bookmarks-before-sync.json. Which folder or filter the Feeds page
+    /// version overwrites the local data, the local data is saved to bookmarks-before-sync.json. Which folder the Feeds page
     /// last showed stays per PC. The single shared file of the older setup ("Browse bookmarks.json") is still read, as another device,
     /// but never written.
     /// </summary>

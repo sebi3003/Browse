@@ -1,8 +1,8 @@
 <UserControl x:Class="Browse.Views.FeedsView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- The Feeds page: folders | channels | videos | the YouTube page. Same panel look as the rest of Browse (32 px panels, 4 px corners,
-         6 px gaps); channels and videos get panels twice as high, each with its own thumbnail panel next to the label panel. -->
+    <!-- The Feeds page: folders | channels | YouTube. Same panel look as the rest of Browse (32 px panels, 4 px corners,
+         6 px gaps); channels get panels twice as high, with their own thumbnail panel next to the label panel. -->
     <UserControl.Resources>
         <SolidColorBrush x:Key="Slate" Color="#1A2332"/>
         <SolidColorBrush x:Key="SlateHover" Color="#232F42"/>
@@ -43,7 +43,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Grid Opacity="{Binding Dim}">
+                        <Grid>
                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                             <Border Width="64" CornerRadius="4" Margin="0,0,3,0" Background="{StaticResource Slate}">
                                 <Grid>
@@ -53,37 +53,7 @@
                             </Border>
                             <Border x:Name="L" Grid.Column="1" CornerRadius="4" Background="{StaticResource Slate}" Padding="12,0">
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Title}" Foreground="{StaticResource Light}" FontFamily="Segoe UI" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Text="{Binding CountText}" Foreground="{StaticResource Muted}" FontFamily="Segoe UI" FontSize="12" Margin="0,2,0,0"/>
-                                </StackPanel>
-                            </Border>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="L" Property="Background" Value="{StaticResource SlateHover}"/></Trigger>
-                            <Trigger Property="IsSelected" Value="True"><Setter TargetName="L" Property="Background" Value="{StaticResource Selected}"/></Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <!-- Video: 64 px, the video thumbnail (16:9) in its own panel, then the label panel with title, channel and age. -->
-        <Style x:Key="VideoItem" TargetType="ListBoxItem">
-            <Setter Property="Height" Value="64"/>
-            <Setter Property="Margin" Value="0,0,0,6"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ListBoxItem">
-                        <Grid>
-                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                            <Border Width="114" CornerRadius="4" Margin="0,0,3,0" Background="{StaticResource Slate}">
-                                <Border CornerRadius="4"><Border.Background><ImageBrush ImageSource="{Binding Thumb}" Stretch="UniformToFill"/></Border.Background></Border>
-                            </Border>
-                            <Border x:Name="L" Grid.Column="1" CornerRadius="4" Background="{StaticResource Slate}" Padding="12,0">
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Title}" Foreground="{StaticResource Light}" FontFamily="Segoe UI" FontSize="14" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="38"/>
-                                    <TextBlock Text="{Binding Subtitle}" Foreground="{StaticResource Muted}" FontFamily="Segoe UI" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                    <TextBlock Text="{Binding Title}" Foreground="{StaticResource Light}" FontFamily="Segoe UI" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="38"/>
                                 </StackPanel>
                             </Border>
                         </Grid>
@@ -119,31 +89,6 @@
             </Setter>
         </Style>
 
-        <!-- Filter chips above the videos. -->
-        <Style x:Key="FilterChip" TargetType="Button">
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="Margin" Value="0,0,6,0"/>
-            <Setter Property="Padding" Value="14,0"/>
-            <Setter Property="Background" Value="#1A2332"/>
-            <Setter Property="Foreground" Value="#E7EDF5"/>
-            <Setter Property="FontFamily" Value="Segoe UI"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Focusable" Value="False"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="B" CornerRadius="4" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="B" Property="Opacity" Value="0.85"/></Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
         <Style x:Key="ColumnList" TargetType="ListBox">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -157,7 +102,6 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="210"/><ColumnDefinition Width="6"/>
             <ColumnDefinition Width="300"/><ColumnDefinition Width="6"/>
-            <ColumnDefinition Width="470"/><ColumnDefinition Width="6"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
@@ -187,27 +131,11 @@
         </Grid>
         <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext"/>
 
-        <!-- 3: videos (the feed) -->
+        <!-- 3: YouTube itself (the picked channel's videos page, then whatever you click there) -->
         <Grid Grid.Column="4">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                <Button x:Name="TodayChip" Style="{StaticResource FilterChip}" Content="Today" Tag="today" Click="Filter_Click"/>
-                <Button x:Name="WeekChip" Style="{StaticResource FilterChip}" Content="Week" Tag="week" Click="Filter_Click"/>
-                <Button x:Name="Last5Chip" Style="{StaticResource FilterChip}" Content="Last 5" Tag="last5" Click="Filter_Click"/>
-                <Button x:Name="AllChip" Style="{StaticResource FilterChip}" Content="All" Tag="all" Click="Filter_Click"/>
-                <Button Style="{StaticResource FilterChip}" Content="Refresh" Click="Refresh_Click"/>
-                <TextBlock x:Name="StatusText" Foreground="{StaticResource Muted}" FontFamily="Segoe UI" FontSize="12" VerticalAlignment="Center" Margin="4,0,0,0"/>
-            </StackPanel>
-            <ListBox x:Name="VideoList" Grid.Row="1" Style="{StaticResource ColumnList}" ItemContainerStyle="{StaticResource VideoItem}"
-                     SelectionChanged="VideoList_SelectionChanged"/>
-        </Grid>
-        <GridSplitter Grid.Column="5" Width="6" HorizontalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext"/>
-
-        <!-- 4: the video itself (a YouTube watch page) -->
-        <Grid Grid.Column="6">
-            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Border x:Name="PlayerHeader" Height="32" Margin="0,0,0,6" CornerRadius="4" Background="{StaticResource Slate}" Padding="10,0">
-                <TextBlock x:Name="NowPlaying" Text="Pick a video" Foreground="{StaticResource Light}" FontFamily="Segoe UI" FontSize="14" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                <TextBlock x:Name="NowPlaying" Text="Pick a channel" Foreground="{StaticResource Light}" FontFamily="Segoe UI" FontSize="14" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
             </Border>
             <Border x:Name="PlayerHost" Grid.Row="1" CornerRadius="4" Background="#0A0C10"/>
         </Grid>

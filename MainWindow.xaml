@@ -230,7 +230,7 @@
                 <!-- Feeds: the YouTube feeds page; the same two-panel chip, YouTube red while the page is open. -->
                 <Button x:Name="FeedsButton" AutomationProperties.AutomationId="FeedsToggle" Style="{StaticResource ProfileChip}" Margin="0,0,6,0"
                         Background="{DynamicResource ThemeChip}" BorderBrush="{DynamicResource ThemeTool}" Foreground="{DynamicResource ThemeChipText}" Tag="&#xE714;" Content="Feeds" Click="Feeds_Click"
-                        ToolTip="Feeds: folders, channels, videos"/>
+                        ToolTip="Feeds: folders, channels, YouTube"/>
                 <Button x:Name="BackButton" Style="{StaticResource ToolChip}" Content="&#xE72B;" Click="Back_Click" ToolTip="Back (Alt+Left)"/>
                 <Button x:Name="ForwardButton" Style="{StaticResource ToolChip}" Content="&#xE72A;" Click="Forward_Click" ToolTip="Forward (Alt+Right)"/>
             </StackPanel>

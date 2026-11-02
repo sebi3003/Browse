@@ -9,7 +9,7 @@ using Browse.Models;
 
 namespace Browse.Services
 {
-    /// <summary>Thumbnails for the Feeds page, downloaded by WPF in the background and kept for the session.</summary>
+    /// <summary>Channel icons for the Feeds page, downloaded by WPF in the background and kept for the session.</summary>
     public static class ImageCache
     {
         private static readonly ConcurrentDictionary<string, ImageSource> Cache = new();
@@ -57,7 +57,6 @@ namespace Browse.Services
             // only exist on channels are appended after these, so older files work unchanged.
             public List<string> Folders { get; set; } = [];
             public string LastFolder { get; set; } = "";
-            public string Filter { get; set; } = "week";
         }
 
         public static Data Load()
@@ -270,67 +269,6 @@ namespace Browse.Services
                 if (name.Length > 0 && !order.Contains(name, StringComparer.OrdinalIgnoreCase)) order.Add(name);
 
             return order.Select(n => new FeedFolder(n, byFolder.TryGetValue(n, out var list) ? list : [])).ToList();
-        }
-    }
-
-    /// <summary>Reads a channel's YouTube RSS (Atom) feed. Results are kept for a few minutes so switching folders is quick.</summary>
-    public static class FeedFetchService
-    {
-        private static readonly HttpClient Http = CreateClient();
-        private static readonly ConcurrentDictionary<string, (DateTime At, List<FeedVideo> Items)> Cache = new();
-        private static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(10);
-
-        private static HttpClient CreateClient()
-        {
-            var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 Browse");
-            return http;
-        }
-
-        public static void ClearCache() => Cache.Clear();
-
-        public static async Task<List<FeedVideo>> FetchAsync(string feedUrl)
-        {
-            if (Cache.TryGetValue(feedUrl, out var hit) && DateTime.UtcNow - hit.At < MaxAge) return hit.Items;
-
-            XNamespace atom = "http://www.w3.org/2005/Atom";
-            XNamespace media = "http://search.yahoo.com/mrss/";
-            XNamespace yt = "http://www.youtube.com/xml/schemas/2015";
-
-            var doc = XDocument.Parse(await Http.GetStringAsync(feedUrl));
-            var items = new List<FeedVideo>();
-            foreach (var entry in doc.Descendants(atom + "entry"))
-            {
-                string link = entry.Elements(atom + "link")
-                    .Where(l => ((string?)l.Attribute("rel") ?? "alternate") == "alternate")
-                    .Select(l => ((string?)l.Attribute("href") ?? "").Trim()).FirstOrDefault(h => h.Length > 0) ?? "";
-                if (link.Contains("/shorts/", StringComparison.OrdinalIgnoreCase)) continue;
-
-                string id = entry.Element(yt + "videoId")?.Value.Trim() ?? IdFromLink(link);
-                if (id.Length == 0) continue;
-                string thumb = (string?)entry.Descendants(media + "thumbnail").FirstOrDefault()?.Attribute("url") ?? $"https://i.ytimg.com/vi/{id}/mqdefault.jpg";
-                DateTime? published = DateTimeOffset.TryParse((entry.Element(atom + "published") ?? entry.Element(atom + "updated"))?.Value, out var p) ? p.UtcDateTime : null;
-
-                items.Add(new FeedVideo
-                {
-                    Title = (entry.Element(atom + "title")?.Value ?? "Untitled").Trim(),
-                    Link = link, VideoId = id, Published = published, ThumbnailUrl = thumb,
-                });
-            }
-            Cache[feedUrl] = (DateTime.UtcNow, items);
-            return items;
-        }
-
-        private static string IdFromLink(string link)
-        {
-            if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)) return "";
-            if (uri.Host.Contains("youtu.be", StringComparison.OrdinalIgnoreCase)) return uri.AbsolutePath.Trim('/');
-            foreach (var pair in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var parts = pair.Split('=', 2);
-                if (parts.Length == 2 && parts[0] == "v") return Uri.UnescapeDataString(parts[1]);
-            }
-            return "";
         }
     }
 }
